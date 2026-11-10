@@ -25,7 +25,19 @@ No pongas una `secret key`, `service_role`, contraseña de base de datos ni cred
 
 La integración de Google requiere además configurar el proveedor Google en Supabase Auth y crear credenciales OAuth de tipo Web en Google Cloud. El callback se copia literalmente desde la pantalla del proveedor Google en Supabase; no inventes una URL. La URL pública de GitHub Pages debe agregarse a la lista de Redirect URLs de Supabase.
 
-## 4. Dependencia del cliente
+## 4. Configuración de GitHub Pages
+
+Para que la versión publicada reciba la configuración pública de Supabase durante la compilación:
+
+1. Abrí el repositorio en GitHub y entrá en **Settings → Secrets and variables → Actions → Variables**.
+2. Creá la variable `VITE_SUPABASE_URL` con el **Project URL**.
+3. Creá la variable `VITE_SUPABASE_PUBLISHABLE_KEY` con la **Publishable API Key**.
+4. No agregues claves `secret` ni `service_role`. La publishable key es pública; las políticas RLS son las que protegen los datos.
+5. El workflow solo publica cuando se actualiza `main`; esta rama de trabajo no publica la web.
+
+En **Supabase → Authentication → URL Configuration**, agregá como Site URL la URL real de tu web publicada y agregá también `http://localhost:5173/**` a Redirect URLs para pruebas. Para Google OAuth, la dirección de callback del proveedor es la que Supabase muestra en la configuración del proveedor; copiá esa dirección exactamente en Google Cloud.
+
+## 5. Dependencia del cliente
 
 En el proyecto local ejecutá:
 
