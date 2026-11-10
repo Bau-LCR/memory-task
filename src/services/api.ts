@@ -166,13 +166,14 @@ export const api = {
     }
     const files = read<FileItem[]>(K.files, [])
     let used = files.reduce((sum, item) => sum + item.size, 0)
+    const addedIds: string[] = []
     for (const file of selected) {
       if (BLOCKED.test(file.name)) errors.push(file.name + ': tipo de archivo no permitido')
       else if (file.size > MAX_FILE) errors.push(file.name + ': supera el máximo de 50 MB por archivo')
       else if (used + file.size > QUOTA) errors.push(file.name + ': cuota de 50 MB agotada')
-      else { const id = uid(); files.unshift({ id, name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); demoBlobs.set(id, file); used += file.size }
+      else { const id = uid(); files.unshift({ id, name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); demoBlobs.set(id, file); addedIds.push(id); used += file.size }
     }
-    kv.set(K.files, files)
+    try { kv.set(K.files, files) } catch (error) { addedIds.forEach((id) => demoBlobs.delete(id)); throw error }
     return errors
   },
   async moveFile(id: string, folderId: string | null) {
