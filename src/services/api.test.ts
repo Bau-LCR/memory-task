@@ -64,17 +64,17 @@ describe('archivos', () => {
     expect(errs).toEqual(['virus.EXE: tipo de archivo no permitido'])
     expect((await api.files()).map((x) => x.name)).toEqual(['ok.txt'])
   })
-  it('rechaza archivos de más de 10 MB', async () => {
+  it('rechaza archivos de más de 50 MB', async () => {
     const errs = await api.addFiles([file('grande.bin', MAX_FILE + 1)], null)
-    expect(errs[0]).toContain('10 MB')
+    expect(errs[0]).toContain('50 MB')
     expect(await api.files()).toHaveLength(0)
   })
-  it('respeta la cuota total de 25 MB', async () => {
-    expect(await api.addFiles([file('a.bin', MAX_FILE), file('b.bin', MAX_FILE)], null)).toEqual([])
-    const errs = await api.addFiles([file('c.bin', MAX_FILE)], null)
+  it('respeta la cuota total de 50 MB', async () => {
+    expect(await api.addFiles([file('a.bin', 30 * 1024 * 1024)], null)).toEqual([])
+    const errs = await api.addFiles([file('b.bin', 21 * 1024 * 1024)], null)
     expect(errs[0]).toContain('cuota')
     const u = await api.usage()
-    expect(u.used).toBe(2 * MAX_FILE)
+    expect(u.used).toBe(30 * 1024 * 1024)
     expect(u.used).toBeLessThanOrEqual(QUOTA)
   })
   it('no permite mover a una carpeta inexistente', async () => {
