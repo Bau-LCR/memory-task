@@ -7,7 +7,7 @@ Esta rama prepara la primera etapa de almacenamiento personal. No contiene clave
 1. Abrí el proyecto de Supabase.
 2. Entrá en **SQL Editor** y creá una consulta nueva.
 3. Copiá y ejecutá el contenido de `supabase/migrations/20261110000100_initial_private_storage.sql`.
-4. En **Table Editor** deberían aparecer `mt_folders`, `mt_memories`, `mt_memory_versions` y `mt_files`.
+4. En **Table Editor** deberían aparecer `mt_folders`, `mt_memories`, `mt_files` y `mt_activity`. Las versiones anteriores de cada recuerdo se guardan dentro de `mt_memories`.
 5. En **Storage** debe aparecer el bucket `memory-task-private` con acceso privado.
 
 La migración habilita RLS en todas las tablas, limita las filas al usuario autenticado y restringe los archivos a una carpeta raíz con su UUID. No hagas público el bucket.
