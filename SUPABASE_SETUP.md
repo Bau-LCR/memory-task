@@ -9,6 +9,7 @@ Esta rama prepara la primera etapa de almacenamiento personal. No contiene clave
 3. Copiá y ejecutá el contenido de `supabase/migrations/20261110000100_initial_private_storage.sql`.
 4. En **Table Editor** deberían aparecer `mt_folders`, `mt_memories`, `mt_files` y `mt_activity`. Las versiones anteriores de cada recuerdo se guardan dentro de `mt_memories`.
 5. En **Storage** debe aparecer el bucket `memory-task-private` con acceso privado.
+6. Ejecutá también `supabase/migrations/20261110000200_personal_storage_quota.sql`. Esta segunda migración aplica la cuota de 50 MiB por cuenta personal, también en la base de datos y en el bucket, y evita depender solo de la validación del navegador.
 
 La migración habilita RLS en todas las tablas, limita las filas al usuario autenticado y restringe los archivos a una carpeta raíz con su UUID. No hagas público el bucket.
 
@@ -47,6 +48,8 @@ npm install @supabase/supabase-js
 
 Esto actualizará `package.json` y `package-lock.json` juntos. No hagas `npm ci` antes de actualizar el lockfile.
 
-## Estado
+## Estado de esta rama
 
-Este primer paso crea el esquema y sus barreras de seguridad, pero todavía no cambia la interfaz de demostración para que escriba en Supabase. La siguiente parte será integrar sesión real, recuerdos, carpetas y archivos, y probar con dos cuentas distintas que no puedan leerse entre sí. Hasta completar esas pruebas, no subas información privada real.
+La rama conecta la cuenta personal autenticada con PostgreSQL y el bucket privado: recuerdos, carpetas, actividad y metadatos de archivos se consultan por usuario; el contenido binario se sube, descarga y elimina en Storage. La cuota personal prevista es de 50 MiB. La migración `20261110000200_personal_storage_quota.sql` debe ejecutarse manualmente en SQL Editor antes de probar las subidas.
+
+La cuenta de servicio todavía no tiene su backend de espacios, usuarios externos, sectores ni claves API. Su cuota independiente de 50 MiB queda reservada para esa implementación y no se comparte con la personal. No uses información sensible ni publiques esta rama hasta completar las pruebas de seguridad y persistencia.
