@@ -27,7 +27,8 @@ create table if not exists public.mt_memories (
   category text not null default 'Recuerdo',
   tags text[] not null default '{}',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (id, user_id)
 );
 
 create table if not exists public.mt_memory_versions (
@@ -41,7 +42,6 @@ create table if not exists public.mt_memory_versions (
     foreign key (memory_id, user_id) references public.mt_memories(id, user_id) on delete cascade
 );
 
-alter table public.mt_memories add constraint mt_memories_id_user_unique unique (id, user_id);
 
 create table if not exists public.mt_files (
   id uuid primary key default gen_random_uuid(),
@@ -53,7 +53,7 @@ create table if not exists public.mt_files (
   mime_type text not null default 'application/octet-stream',
   created_at timestamptz not null default now(),
   constraint mt_files_folder_same_owner
-    foreign key (folder_id, user_id) references public.mt_folders(id, user_id) on delete set null
+    foreign key (folder_id, user_id) references public.mt_folders(id, user_id) on delete restrict
 );
 
 create index if not exists mt_memories_user_updated on public.mt_memories(user_id, updated_at desc);
