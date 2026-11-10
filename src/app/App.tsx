@@ -36,10 +36,12 @@ export default function App() {
   const refresh = async () => setSession(await api.session())
   useEffect(() => {
     let active = true
-    refresh().finally(() => { if (active) setReady(true) })
+    // Suscribirse antes de consultar la sesión evita perder un cambio de autenticación
+    // que ocurra mientras Supabase procesa el retorno OAuth.
     const subscription = supabase?.auth.onAuthStateChange(() => {
       Promise.resolve().then(() => { if (active) void refresh() })
     }).data.subscription
+    refresh().finally(() => { if (active) setReady(true) })
     return () => {
       active = false
       subscription?.unsubscribe()
@@ -48,6 +50,7 @@ export default function App() {
 
   let view: ReactElement
   if (!ready) view = <p className="p-8 text-slate-500">Cargando…</p>
+  else if (path === '/' && session && !session.demo) view = <Redirect to={session.mode ? (session.mode === 'personal' ? '/panel' : '/servicio') : '/modo'} />
   else if (path === '/') view = <LandingPage />
   else if (path === '/login') view = <LoginPage />
   else if (!session) view = <Redirect to="/login" />
