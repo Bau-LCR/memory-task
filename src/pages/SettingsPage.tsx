@@ -28,13 +28,13 @@ export function SettingsPage() {
           <Button variant="ghost" className="mt-3" onClick={switchMode}>Cambiar a {other === 'personal' ? 'cuenta personal' : 'cuenta de servicio'}</Button>
         </Card>
         <Card title="Almacenamiento">
-          {u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
+          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente de 50 MB. El almacenamiento de servicio estará disponible cuando terminemos su backend.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
         </Card>
         <Card title="Preferencias">
           <p className="text-sm text-slate-600">Las animaciones respetan la preferencia del sistema (<code>prefers-reduced-motion</code>). No hay más preferencias por ahora.</p>
         </Card>
         <Card title="Seguridad">
-          <p className="text-sm text-slate-600">Sin autenticación real: la sesión es de demostración y no hay contraseñas. El aislamiento entre cuentas, la autorización y las pruebas de seguridad se implementan en el backend antes de usar datos reales.</p>
+          <p className="text-sm text-slate-600">La identidad se verifica con Google y las tablas personales aplican políticas RLS para aislar los datos por usuario. La seguridad debe seguir verificándose antes de almacenar información sensible.</p>
         </Card>
         <Card title="Sesiones">
           <p className="text-sm text-slate-600">Sesión autenticada.</p>
@@ -47,7 +47,7 @@ export function SettingsPage() {
         </Card>
         <Card title="Exportación y datos">
           <p className="text-sm text-slate-600">Exporta tus recuerdos y los metadatos de tus archivos en JSON.</p>
-          <div className="mt-3 flex flex-wrap gap-2"><Button onClick={exportData}>Exportar datos</Button><Button variant="danger" onClick={reset}>Reiniciar datos locales</Button></div>
+          <div className="mt-3 flex flex-wrap gap-2"><Button onClick={exportData}>Exportar datos</Button>{session.demo && <Button variant="danger" onClick={reset}>Reiniciar datos locales</Button>}</div>
         </Card>
       </div>
     </>
