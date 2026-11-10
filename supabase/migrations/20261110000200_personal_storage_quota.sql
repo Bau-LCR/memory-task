@@ -1,11 +1,10 @@
 -- Memory Task: cuota real de almacenamiento personal.
--- La cuota se comprueba en PostgreSQL para evitar que el cliente pueda saltársela.
--- Cuenta personal: 50 MiB por usuario. La cuota de servicio será independiente y
--- se aplicará en sus propias tablas/backend cuando se habilite esa modalidad.
+-- Cuenta personal: 50 MiB por usuario. La cuota de servicio será independiente
+-- y se implementará en las tablas/backend propios de esa modalidad.
 --
--- El límite máximo por archivo se configura en el bucket desde Supabase Storage.
--- No modificamos storage.buckets desde aquí porque esa tabla es propiedad interna
--- del servicio de Storage y el rol del SQL Editor no tiene permiso para alterarla.
+-- No modificamos storage.buckets ni creamos triggers sobre tablas internas
+-- de Storage: Supabase reserva la propiedad de esas tablas para su servicio.
+-- La cuota de objetos se valida mediante una función usada por las políticas RLS.
 
 create or replace function public.mt_enforce_personal_storage_quota()
 returns trigger
@@ -17,8 +16,6 @@ declare
   used_bytes bigint;
   quota_bytes constant bigint := 52428800;
 begin
-  -- Serializa escrituras simultáneas del mismo usuario para que no excedan
-  -- la cuota por dos subidas concurrentes.
   perform pg_advisory_xact_lock(hashtextextended(new.owner_id::text, 0));
 
   select coalesce(sum(size_bytes), 0)
@@ -45,13 +42,19 @@ execute function public.mt_enforce_personal_storage_quota();
 
 -- Evita carpetas duplicadas con el mismo nombre dentro del mismo nivel.
 create unique index if not exists mt_folders_unique_sibling_name
-on public.mt_folders (owner_id, coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+on public.mt_folders (
+  owner_id,
+  coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid),
+  lower(name)
+);
 
-
--- Control adicional sobre los objetos binarios: evita que un cliente autenticado
--- suba objetos directamente al bucket sin crear la fila mt_files correspondiente.
-create or replace function public.mt_enforce_personal_storage_object_quota()
-returns trigger
+-- Comprueba la cuota total antes de permitir subir o reemplazar un objeto.
+-- La función solo devuelve un booleano y solo acepta rutas del usuario actual.
+create or replace function public.mt_storage_object_within_personal_quota(
+  p_name text,
+  p_metadata jsonb
+)
+returns boolean
 language plpgsql
 security definer
 set search_path = ''
@@ -62,43 +65,53 @@ declare
   used_bytes bigint;
   quota_bytes constant bigint := 52428800;
 begin
-  if new.bucket_id <> 'memory-task-private' then
-    return new;
+  owner_folder := (storage.foldername(p_name))[1];
+
+  if auth.uid() is null or owner_folder is null
+     or owner_folder <> auth.uid()::text then
+    return false;
   end if;
 
-  owner_folder := (storage.foldername(new.name))[1];
-  if owner_folder is null then
-    raise exception 'Ruta de almacenamiento inválida.'
-      using errcode = 'check_violation';
+  if coalesce(p_metadata->>'size', '') !~ '^[0-9]+$' then
+    return false;
   end if;
 
-  if coalesce(new.metadata->>'size', '') !~ '^[0-9]+$' then
-    raise exception 'No se pudo verificar el tamaño del archivo.'
-      using errcode = 'check_violation';
-  end if;
-  object_size := (new.metadata->>'size')::bigint;
-
-  perform pg_advisory_xact_lock(hashtextextended(owner_folder, 0));
+  object_size := (p_metadata->>'size')::bigint;
 
   select coalesce(sum((metadata->>'size')::bigint), 0)
     into used_bytes
     from storage.objects
    where bucket_id = 'memory-task-private'
      and (storage.foldername(name))[1] = owner_folder
-     and name <> new.name
+     and name <> p_name
      and coalesce(metadata->>'size', '') ~ '^[0-9]+$';
 
-  if used_bytes + object_size > quota_bytes then
-    raise exception 'Se alcanzó la cuota personal de almacenamiento de 50 MB.'
-      using errcode = 'check_violation';
-  end if;
-
-  return new;
+  return used_bytes + object_size <= quota_bytes;
 end;
 $$;
 
-drop trigger if exists mt_storage_enforce_personal_quota on storage.objects;
-create trigger mt_storage_enforce_personal_quota
-before insert or update on storage.objects
-for each row
-execute function public.mt_enforce_personal_storage_object_quota();
+revoke all on function public.mt_storage_object_within_personal_quota(text, jsonb) from public, anon;
+grant execute on function public.mt_storage_object_within_personal_quota(text, jsonb) to authenticated;
+
+-- Las políticas verifican propietario y cuota, tanto al subir como al reemplazar.
+drop policy if exists "mt_storage_insert_own" on storage.objects;
+create policy "mt_storage_insert_own" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'memory-task-private'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+    and public.mt_storage_object_within_personal_quota(name, metadata)
+  );
+
+drop policy if exists "mt_storage_update_own" on storage.objects;
+create policy "mt_storage_update_own" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'memory-task-private'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  )
+  with check (
+    bucket_id = 'memory-task-private'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+    and public.mt_storage_object_within_personal_quota(name, metadata)
+  );
