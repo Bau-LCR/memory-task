@@ -2,6 +2,7 @@
 // (/v1) sin cambiar los componentes. IMPORTANTE: estas validaciones son de comodidad de interfaz.
 // En el backend real se repiten y son las únicas que cuentan.
 import { localKV as kv } from './storage'
+import { supabase } from '../lib/supabase'
 import type { Activity, FileItem, Folder, Memory, MemoryInput, Mode, Session } from '../types'
 
 export const SOURCE_LABEL = 'Datos locales de demostración'
@@ -22,7 +23,25 @@ const log = (text: string) => {
 }
 
 export const api = {
-  async session() { return read<Session | null>(K.session, null) },
+  async session() {
+    if (supabase) {
+      const result = await supabase.auth.getSession()
+      if (result.error) throw result.error
+      const user = result.data.session?.user
+      if (user) {
+        const metadata = user.user_metadata || {}
+        const mode = metadata.memory_task_mode === 'personal' || metadata.memory_task_mode === 'service' ? metadata.memory_task_mode : null
+        return { name: String(metadata.full_name || metadata.name || user.email || 'Usuario'), email: user.email || '', mode, demo: false } satisfies Session
+      }
+    }
+    return read<Session | null>(K.session, null)
+  },
+  async signInWithGoogle() {
+    if (!supabase) throw new Error('Supabase no está configurado. Revisá las variables de entorno.')
+    const redirectTo = new URL('#/login', window.location.href).toString()
+    const result = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
+    if (result.error) throw result.error
+  },
   async signInDemo() {
     const prev = read<Session | null>(K.session, null)
     if (prev) return prev
@@ -32,12 +51,29 @@ export const api = {
     return s
   },
   async setMode(mode: Mode) {
+    if (supabase) {
+      const result = await supabase.auth.getSession()
+      if (result.data.session?.user) {
+        const update = await supabase.auth.updateUser({ data: { memory_task_mode: mode } })
+        if (update.error) throw update.error
+        return
+      }
+    }
     const s = read<Session | null>(K.session, null)
     if (!s) throw new Error('No hay sesión')
     kv.set(K.session, { ...s, mode })
     log(`Modalidad seleccionada: ${mode === 'personal' ? 'personal' : 'servicio'}`)
   },
-  async signOut() { kv.remove(K.session) },
+  async signOut() {
+    if (supabase) {
+      const result = await supabase.auth.getSession()
+      if (result.data.session) {
+        const signedOut = await supabase.auth.signOut()
+        if (signedOut.error) throw signedOut.error
+      }
+    }
+    kv.remove(K.session)
+  },
   async resetDemo() { kv.clearAll(); blobs.clear() },
 
   async folders() { return read<Folder[]>(K.folders, []) },
