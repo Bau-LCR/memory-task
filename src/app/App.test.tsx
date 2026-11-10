@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+vi.mock('../lib/supabase', () => ({ supabase: null, isSupabaseConfigured: false }))
 import { isSupabaseConfigured } from '../lib/supabase'
 
 const goTo = (hash: string) => { window.location.hash = hash }
