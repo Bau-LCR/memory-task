@@ -13,6 +13,7 @@ const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 const read = <T>(k: string, f: T) => kv.get<T>(k, f)
 const isCloud = Boolean(supabase)
+const demoBlobs = new Map<string, File>()
 
 async function currentUser() {
   if (!supabase) return null
@@ -82,6 +83,7 @@ export const api = {
   async resetDemo() {
     if (supabase) throw new Error('No se pueden borrar datos de una cuenta conectada desde el reinicio local.')
     kv.clearAll()
+    demoBlobs.clear()
   },
 
   async folders(): Promise<Folder[]> {
@@ -122,7 +124,7 @@ export const api = {
     }
     return read<FileItem[]>(K.files, [])
   },
-  hasFile: (_id: string) => true,
+  hasFile: (id: string) => Boolean(supabase) || demoBlobs.has(id),
   async getFile(id: string): Promise<Blob | undefined> {
     if (supabase) {
       const user = await currentUser()
@@ -133,7 +135,7 @@ export const api = {
       fail(error)
       return data
     }
-    return undefined
+    return demoBlobs.get(id)
   },
   async addFiles(selected: File[], folderId: string | null): Promise<string[]> {
     const errors: string[] = []
@@ -167,7 +169,7 @@ export const api = {
       if (BLOCKED.test(file.name)) errors.push(file.name + ': tipo de archivo no permitido')
       else if (file.size > MAX_FILE) errors.push(file.name + ': supera el máximo de 50 MB por archivo')
       else if (used + file.size > QUOTA) errors.push(file.name + ': cuota de 50 MB agotada')
-      else { files.unshift({ id: uid(), name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); used += file.size }
+      else { const id = uid(); files.unshift({ id, name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); demoBlobs.set(id, file); used += file.size }
     }
     kv.set(K.files, files)
     return errors
@@ -196,6 +198,7 @@ export const api = {
       return
     }
     kv.set(K.files, read<FileItem[]>(K.files, []).filter((file) => file.id !== id))
+    demoBlobs.delete(id)
     localLog('Archivo eliminado')
   },
 
