@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { api } from '../../services/api'
 import { go, useSession } from '../../app/session'
-import { Button, DemoBadge, Logo, cx } from '../ui'
+import { Button, DemoBadge, Badge, Logo, cx } from '../ui'
 import type { Mode } from '../../types'
 
 const NAV: Record<Mode, ReadonlyArray<readonly [string, string]>> = {
@@ -30,7 +30,7 @@ export function Shell({ path, children }: { path: string; children: ReactNode })
       <div className="min-w-0 flex-1">
         <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
           <button className="rounded-lg border px-3 py-1 text-sm md:hidden" onClick={() => setOpen((o) => !o)} aria-label="Menú">☰</button>
-          <DemoBadge />
+          {session.demo ? <DemoBadge /> : <Badge>Cuenta conectada</Badge>}
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="hidden text-slate-600 sm:inline">{session.name}</span>
             <Button variant="ghost" onClick={signOut}>Salir</Button>
