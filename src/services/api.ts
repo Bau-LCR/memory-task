@@ -100,7 +100,8 @@ export const api = {
     if (!clean || clean.length > 60 || /[\\/]/.test(clean)) throw new Error('Nombre inválido (máx. 60 caracteres, sin barras)')
     if (supabase) {
       const user = await currentUser()
-      const { data: siblings, error: lookupError } = await supabase.from('mt_folders').select('id,name').eq('owner_id', user.id).eq('parent_id', parentId)
+      const siblingQuery = supabase.from('mt_folders').select('id,name').eq('owner_id', user.id)
+      const { data: siblings, error: lookupError } = parentId ? await siblingQuery.eq('parent_id', parentId) : await siblingQuery.is('parent_id', null)
       fail(lookupError)
       if ((siblings ?? []).some((item) => item.name.toLowerCase() === clean.toLowerCase())) throw new Error('Ya existe una carpeta con ese nombre')
       const { error } = await supabase.from('mt_folders').insert({ owner_id: user.id, name: clean, parent_id: parentId })
