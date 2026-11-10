@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { go, useSession } from '../app/session'
 import { Button, Card, Logo } from '../components/ui'
 
 export function LoginPage() {
-  const { refresh } = useSession()
+  const { session, refresh } = useSession()
+  useEffect(() => {
+    if (session && !session.demo) go(session.mode ? (session.mode === 'personal' ? '/panel' : '/servicio') : '/modo')
+  }, [session])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const enter = async () => {
