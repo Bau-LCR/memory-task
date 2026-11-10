@@ -16,7 +16,7 @@ const isCloud = Boolean(supabase)
 const demoBlobs = new Map<string, File>()
 
 async function currentUser() {
-  if (!supabase) return null
+  if (!supabase) throw new Error('Supabase no está configurado.')
   const { data, error } = await supabase.auth.getUser()
   if (error) throw error
   if (!data.user) throw new Error('Tu sesión expiró. Volvé a iniciar sesión.')
@@ -134,6 +134,7 @@ export const api = {
       if (!row) throw new Error('No se encontró el archivo.')
       const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(row.storage_path)
       fail(error)
+      if (!data) throw new Error('El archivo está registrado, pero no se encontró su contenido en el almacenamiento.')
       return data
     }
     return demoBlobs.get(id)
