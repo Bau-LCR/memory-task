@@ -78,6 +78,9 @@ begin
 
   object_size := (p_metadata->>'size')::bigint;
 
+  -- Serializa subidas simultáneas del mismo usuario.
+  perform pg_advisory_xact_lock(hashtextextended(owner_folder, 0));
+
   select coalesce(sum((metadata->>'size')::bigint), 0)
     into used_bytes
     from storage.objects
