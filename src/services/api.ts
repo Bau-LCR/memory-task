@@ -14,8 +14,12 @@ const blobs = new Map<string, File>() // el contenido solo vive en memoria de es
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 const read = <T>(k: string, f: T) => kv.get<T>(k, f)
-const log = (text: string) =>
-  kv.set(K.activity, [{ id: uid(), text, at: now() }, ...read<Activity[]>(K.activity, [])].slice(0, 20))
+// El registro de actividad es informativo: si falla no debe invalidar una operación ya guardada.
+const log = (text: string) => {
+  try {
+    kv.set(K.activity, [{ id: uid(), text, at: now() }, ...read<Activity[]>(K.activity, [])].slice(0, 20))
+  } catch { /* se ignora a propósito */ }
+}
 
 export const api = {
   async session() { return read<Session | null>(K.session, null) },
@@ -55,6 +59,7 @@ export const api = {
     const files = read<FileItem[]>(K.files, [])
     let used = files.reduce((a, f) => a + f.size, 0)
     const errors: string[] = []
+    const added: string[] = []
     for (const f of list) {
       if (BLOCKED.test(f.name)) errors.push(`${f.name}: tipo de archivo no permitido`)
       else if (f.size > MAX_FILE) errors.push(`${f.name}: supera el máximo de 10 MB por archivo`)
@@ -63,11 +68,17 @@ export const api = {
         const item: FileItem = { id: uid(), name: f.name, size: f.size, type: f.type || 'application/octet-stream', folderId, addedAt: now() }
         files.unshift(item)
         blobs.set(item.id, f)
+        added.push(item.id)
         used += f.size
-        log(`Archivo agregado: ${f.name}`)
       }
     }
-    kv.set(K.files, files)
+    try {
+      kv.set(K.files, files)
+    } catch (e) {
+      added.forEach((id) => blobs.delete(id)) // no dejar contenido huérfano en memoria
+      throw e
+    }
+    added.forEach((id) => log(`Archivo agregado: ${files.find((x) => x.id === id)?.name ?? ''}`))
     return errors
   },
   async moveFile(id: string, folderId: string | null) {

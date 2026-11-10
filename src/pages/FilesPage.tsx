@@ -28,9 +28,12 @@ export function FilesPage() {
     reload()
   }
   const pick = async (input: HTMLInputElement) => {
-    const errs = await api.addFiles(Array.from(input.files ?? []), folderId)
+    try {
+      setErrors(await api.addFiles(Array.from(input.files ?? []), folderId))
+    } catch (e) {
+      setErrors([(e as Error).message])
+    }
     input.value = ''
-    setErrors(errs)
     reload()
   }
   const create = (e: FormEvent) => {

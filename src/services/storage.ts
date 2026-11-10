@@ -19,7 +19,12 @@ export const localKV: KV = {
     }
   },
   set<T>(key: string, value: T) {
-    localStorage.setItem(NS + key, JSON.stringify(value))
+    try {
+      localStorage.setItem(NS + key, JSON.stringify(value))
+    } catch {
+      // Almacenamiento lleno, modo privado restrictivo o bloqueado por el navegador.
+      throw new Error('No se pudo guardar en este navegador (almacenamiento lleno o bloqueado).')
+    }
   },
   remove(key: string) {
     localStorage.removeItem(NS + key)

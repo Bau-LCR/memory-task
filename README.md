@@ -1,16 +1,17 @@
 # Memory Task
 
-Plataforma de almacenamiento y memoria para personas (cuenta personal) y aplicaciones (cuenta de servicio). **Estado: Etapa A, frontend en modo demostración.** No hay servidor, autenticación real ni datos reales.
+Plataforma de almacenamiento y memoria para personas (cuenta personal) y aplicaciones (cuenta de servicio). **Estado: Etapa 1 completada (auditoría y reparación del frontend); sigue en modo demostración.** Ver [`PROGRESS.md`](PROGRESS.md). No hay servidor, autenticación real ni datos reales.
 
 ## Ejecutar en local
 
-Requiere Node.js 18 o superior.
+Requiere Node.js 20.19 o superior, o 22.12 o superior (ver `.nvmrc`).
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + build de producción en dist/
 npm run typecheck  # solo comprobación de tipos
+npm test           # pruebas (Vitest + Testing Library)
 ```
 
 ## Estructura
@@ -36,18 +37,16 @@ backend/          reservado para la API (pendiente)
 | Cuenta de servicio (espacios, usuarios, sectores, API keys, consumo) | Solo ilustrativo; botones desactivados |
 | Google Sign-In, términos, API, PostgreSQL, almacenamiento externo, backups, IA | Pendiente: requiere backend y servicios externos |
 
-## Subir a un repositorio privado de GitHub
+## Despliegue automático (GitHub Pages)
 
-1. En GitHub: **New repository**, nombre `memory-task`, visibilidad **Private**. No agregues README ni .gitignore.
-2. En la carpeta del proyecto:
+Cada push a `main` ejecuta `.github/workflows/deploy.yml`: instala, comprueba tipos, corre las pruebas, compila y publica en
+`https://bau-lcr.github.io/memory-task/`. En ramas y pull requests corre `.github/workflows/ci.yml` (sin publicar).
 
-```bash
-git init
-git add .
-git commit -m "Etapa A: frontend de Memory Task"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/memory-task.git
-git push -u origin main
-```
+Activación, una sola vez: en GitHub, **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
-No subas `.env` ni secretos (el `.gitignore` ya los excluye). No actives facturación ni vincules tarjetas en ningún servicio.
+El sitio usa rutas relativas (`base: './'`) y un router por hash, por lo que funciona en el subdirectorio `/memory-task/` y también en un dominio propio.
+
+## Seguridad del repositorio
+
+El repositorio es público: todo lo que se suba es visible. No subas `.env` ni secretos (el `.gitignore` ya los excluye) y no actives
+facturación ni vincules tarjetas en ningún servicio. Todo lo que empiece con `VITE_` queda visible en el navegador.
