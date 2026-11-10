@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('../lib/supabase', () => ({ supabase: null }))
+
 import { api, MAX_FILE, QUOTA } from './api'
 
 const file = (name: string, bytes = 10, type = 'text/plain') => new File([new Uint8Array(bytes)], name, { type })
