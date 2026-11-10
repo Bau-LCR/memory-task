@@ -84,7 +84,7 @@ export function FilesPage() {
                   <option value="">Raíz</option>
                   {folders.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-                <Button variant="ghost" disabled={!api.hasFile(f.id)} title={api.hasFile(f.id) ? '' : 'El contenido no se conserva tras recargar la página'} onClick={() => open(f.id, f.name)}>Descargar</Button>
+                <Button variant="ghost" onClick={() => open(f.id, f.name)}>Descargar</Button>
                 <Button variant="danger" onClick={() => { if (confirm(`¿Eliminar "${f.name}"?`)) run(() => api.removeFile(f.id)) }}>Eliminar</Button>
               </li>
             ))}
