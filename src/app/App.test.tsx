@@ -174,7 +174,7 @@ describe('ajustes', () => {
     await user.click(sidebarLink('Ajustes'))
     await heading('Ajustes')
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await user.click(screen.getByRole('button', { name: 'Borrar datos de demostración' }))
+    await user.click(screen.getByRole('button', { name: 'Reiniciar datos locales' }))
     await heading(/Memoria y almacenamiento/)
     expect(Object.keys(localStorage).filter((k) => k.startsWith('mt:demo:'))).toHaveLength(0)
   })
