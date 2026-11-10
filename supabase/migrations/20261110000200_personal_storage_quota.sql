@@ -2,13 +2,10 @@
 -- La cuota se comprueba en PostgreSQL para evitar que el cliente pueda saltársela.
 -- Cuenta personal: 50 MiB por usuario. La cuota de servicio será independiente y
 -- se aplicará en sus propias tablas/backend cuando se habilite esa modalidad.
-
-alter table storage.buckets
-  alter column file_size_limit set default 52428800;
-
-update storage.buckets
-set file_size_limit = 52428800
-where id = 'memory-task-private';
+--
+-- El límite máximo por archivo se configura en el bucket desde Supabase Storage.
+-- No modificamos storage.buckets desde aquí porque esa tabla es propiedad interna
+-- del servicio de Storage y el rol del SQL Editor no tiene permiso para alterarla.
 
 create or replace function public.mt_enforce_personal_storage_quota()
 returns trigger
