@@ -38,7 +38,8 @@ export const api = {
   },
   async signInWithGoogle() {
     if (!supabase) throw new Error('Supabase no está configurado. Revisá las variables de entorno.')
-    const redirectTo = new URL('#/login', window.location.href).toString()
+    // OAuth debe volver a una URL sin fragmento (#): Supabase necesita leer el parámetro ?code=... para completar PKCE.
+    const redirectTo = new URL(window.location.pathname, window.location.origin).toString()
     const result = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
     if (result.error) throw result.error
   },
