@@ -281,6 +281,6 @@ export const api = {
   },
   async exportAll() {
     const [folders, files, memories, activity] = await Promise.all([api.folders(), api.files(), api.memories(), api.activity()])
-    return { exportedAt: now(), source: isCloud ? 'supabase' : 'demo-local', folders, files, memories, activity, nota: isCloud ? 'Los archivos binarios se descargan individualmente desde la sección Archivos; esta exportación contiene sus metadatos.' : 'Datos locales de demostración.' }
+    return { exportedAt: now(), source: isCloud ? 'supabase' : 'demo-local', folders, files, memories, activity, nota: isCloud ? 'Los archivos binarios se descargan individualmente desde la sección Archivos; esta exportación contiene sus metadatos.' : 'La exportación contiene los metadatos de tus datos locales; los archivos binarios no se incluyen.' }
   },
 }
