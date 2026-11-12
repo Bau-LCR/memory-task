@@ -144,7 +144,7 @@ export function ServicesPage() {
         <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios usan operaciones específicas de carga, listado, descarga y eliminación.</p>
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
-      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. La API contempla carga y descarga privadas de archivos; esas operaciones quedarán activas al desplegar la función service-api y probarla.</p>
+      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El backend todavía no está desplegado con la nueva API en Supabase; la función service-api ya está preparada y quedará activa después de desplegarla y probarla.</p>
     </div>
   )
 }
