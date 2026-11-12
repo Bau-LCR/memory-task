@@ -74,7 +74,7 @@ begin
     into used_bytes
     from public.mt_files
    where owner_id = new.owner_id and id <> new.id;
-  if used_bytes + new.size_bytes > v_quota_bytes then
+  if used_bytes + new.size_bytes > quota_bytes then
     raise exception 'Se alcanzó la cuota de almacenamiento personal configurada.'
       using errcode = 'check_violation';
   end if;
@@ -146,7 +146,7 @@ begin
     into used_bytes
     from public.mt_service_objects
    where account_id = new.account_id and id <> new.id;
-  if used_bytes + new.size_bytes > quota_bytes then
+  if used_bytes + new.size_bytes > v_quota_bytes then
     raise exception 'Se alcanzó la cuota compartida configurada para la cuenta de servicio.'
       using errcode = 'check_violation';
   end if;
