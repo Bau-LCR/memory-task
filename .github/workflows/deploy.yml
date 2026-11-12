@@ -4,7 +4,9 @@ name: Deploy to GitHub Pages
 # Requisito (una sola vez, lo hace el propietario): Settings > Pages > Build and deployment > Source: "GitHub Actions".
 on:
   push:
-    branches: [main, feature/supabase-private-storage, feature/admin-platform-foundation]
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,6 +41,7 @@ jobs:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
