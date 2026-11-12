@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Badge, Button, Card, inputCls } from '../components/ui'
 import { fmtDate, fmtSize } from '../utils/format'
 
-type ServiceApp = { id: string; name: string; description: string; status: string; created_at: string; objectCount: number; externalUserCount: number; usedBytes: number; categories: Record<string, { count: number; bytes: number }> }
+type ServiceApp = { id: string; name: string; description: string; status: string; created_at: string; objectCount: number; externalUserCount: number; usedBytes: number; categories: Record<string, { count: number; bytes: number }>; identityConfigured: boolean }
 type ServiceKey = { id: string; app_id: string; name: string; key_prefix: string; scopes: string[]; status: string; created_at: string; last_used_at: string | null }
 type Overview = { account: { id: string; quotaBytes: number; usedBytes: number }; apps: ServiceApp[]; keys: ServiceKey[]; audit: Array<{ id: string; action: string; details: Record<string, unknown>; created_at: string }> }
 
@@ -26,6 +26,8 @@ export function ServicesPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [quotaInput, setQuotaInput] = useState('50')
+  const [identityAppId, setIdentityAppId] = useState('')
+  const [identityJwkText, setIdentityJwkText] = useState('')
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -36,6 +38,19 @@ export function ServicesPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  const saveIdentityKey = async () => {
+    if (!identityAppId) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const publicKey = JSON.parse(identityJwkText)
+      await callService({ action: 'set_identity_public_key', appId: identityAppId, publicKey })
+      setIdentityAppId(''); setIdentityJwkText('')
+      setNotice('Clave pública de identidad registrada. La clave privada debe permanecer en tu backend.')
+      await load()
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
 
   const saveQuota = async () => {
     const mb = Number(quotaInput)
@@ -122,8 +137,13 @@ export function ServicesPage() {
         </form>
       </Card>
       <Card title="Aplicaciones registradas" action={<Button variant="ghost" onClick={() => void load()} disabled={busy}>Actualizar</Button>}>
-        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción') }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
+        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Badge tone={app.identityConfigured ? 'blue' : 'amber'}>{app.identityConfigured ? 'Identidad configurada' : 'Falta identidad'}</Badge><Button variant="ghost" onClick={() => { setIdentityAppId(app.id); setIdentityJwkText('') }}>Configurar identidad</Button><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción') }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
       </Card>
+      {identityAppId && <Card title="Configurar identidad de usuarios externos">
+        <p className="text-sm text-slate-600">Pegá únicamente la clave pública JWK ECDSA P-256 de tu aplicación. La clave privada se queda en el servidor de tu aplicación y firma una identidad de corta duración para cada usuario autenticado.</p>
+        <textarea className={inputCls + ' mt-3 min-h-28'} value={identityJwkText} onChange={e => setIdentityJwkText(e.target.value)} placeholder='{"kty":"EC","crv":"P-256","x":"…","y":"…"}' />
+        <div className="mt-2 flex gap-2"><Button onClick={() => void saveIdentityKey()} disabled={busy || !identityJwkText.trim()}>Guardar clave pública</Button><Button variant="ghost" onClick={() => setIdentityAppId('')}>Cancelar</Button></div>
+      </Card>}
       {keyAppId && <Card title="Generar clave API">
         <form onSubmit={createKey} className="flex flex-wrap gap-2">
           <input className={inputCls + ' min-w-48 flex-1'} value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Nombre de la clave" maxLength={80} required />
@@ -144,7 +164,7 @@ export function ServicesPage() {
         <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios usan operaciones específicas de carga, listado, descarga y eliminación.</p>
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
-      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El backend todavía no está desplegado con la nueva API en Supabase; la función service-api ya está preparada y quedará activa después de desplegarla y probarla.</p>
+      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El backend todavía no está desplegado con la nueva API en Supabase; la función service-api ya está preparada y quedará activa después de desplegarla y probarla. Cada aplicación debe registrar una clave pública para validar identidades externas firmadas.</p>
     </div>
   )
 }
