@@ -32,6 +32,15 @@ Deno.serve(async (req) => {
     const privacy = latest.get("privacy");
     if (!terms || !privacy) return json({ error: "Los documentos legales todavía no están publicados." }, 503);
 
+    if (body?.action === "admin_access_log") {
+      const { data, error } = await admin.from("mt_admin_audit")
+        .select("action,details,created_at")
+        .eq("target_user_id", authData.user.id)
+        .order("created_at", { ascending: false }).limit(50);
+      if (error) throw error;
+      return json({ entries: data ?? [] });
+    }
+
     if (body?.action === "status") {
       const { data: acceptance, error } = await admin.from("mt_legal_acceptances")
         .select("terms_version,privacy_version,accepted_at")
