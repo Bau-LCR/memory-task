@@ -8,6 +8,9 @@ alter table public.mt_service_accounts
   add constraint mt_service_accounts_quota_bytes_check
   check (quota_bytes >= 52428800 and quota_bytes <= 5368709120);
 
+alter table public.mt_service_apps
+  add column if not exists identity_public_key jsonb;
+
 alter table public.mt_service_objects
   add column if not exists object_category text not null default 'custom';
 alter table public.mt_service_objects
