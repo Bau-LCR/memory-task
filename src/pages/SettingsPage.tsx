@@ -11,7 +11,7 @@ export function SettingsPage() {
   const { session, refresh } = useSession()
   const [reduceMotion, setReduceMotion] = useState(() => {
     const saved = localStorage.getItem('mt_reduce_motion')
-    return saved === null ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : saved === 'true'
+    return saved === null ? (typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false) : saved === 'true'
   })
   const [largeText, setLargeText] = useState(() => localStorage.getItem('mt_large_text') === 'true')
   const [compact, setCompact] = useState(() => localStorage.getItem('mt_compact_layout') === 'true')
