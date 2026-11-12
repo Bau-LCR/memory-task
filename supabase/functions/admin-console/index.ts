@@ -71,6 +71,11 @@ Deno.serve(async (req) => {
       const { data: roles, error: rolesError } = await admin
         .from("mt_user_roles").select("user_id,role,created_at");
       if (rolesError) throw rolesError;
+      const { error: directoryAuditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, action: "user_directory_viewed",
+        details: { user_count: users.length },
+      });
+      if (directoryAuditError) throw directoryAuditError;
       const roleMap = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
       return json({
         total: users.length,
@@ -237,6 +242,10 @@ Deno.serve(async (req) => {
     }
 
     if (action === "audit_log") {
+      const { error: auditReadError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, action: "audit_log_viewed", details: {},
+      });
+      if (auditReadError) throw auditReadError;
       const { data, error } = await admin.from("mt_admin_audit")
         .select("id,actor_id,target_user_id,action,details,created_at")
         .order("created_at", { ascending: false }).limit(100);
