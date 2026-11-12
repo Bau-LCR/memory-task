@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { useAsync } from '../hooks/useAsync'
 import { go, useSession } from '../app/session'
@@ -7,6 +8,14 @@ import type { Mode } from '../types'
 
 export function SettingsPage() {
   const { session, refresh } = useSession()
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    const saved = localStorage.getItem('mt_reduce_motion')
+    return saved === null ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : saved === 'true'
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('mt-reduced-motion', reduceMotion)
+    localStorage.setItem('mt_reduce_motion', String(reduceMotion))
+  }, [reduceMotion])
   const { data: u } = useAsync(() => api.usage())
   if (!session?.mode) return null
   const other: Mode = session.mode === 'personal' ? 'service' : 'personal'
@@ -28,10 +37,10 @@ export function SettingsPage() {
           <Button variant="ghost" className="mt-3" onClick={switchMode}>Cambiar a {other === 'personal' ? 'cuenta personal' : 'cuenta de servicio'}</Button>
         </Card>
         <Card title="Almacenamiento">
-          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente de 50 MB. El almacenamiento de servicio estará disponible cuando terminemos su backend.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
+          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente inicial de 50 MiB, compartida entre las aplicaciones. El bucket privado ya está creado; todavía falta implementar y probar las operaciones de archivos de la API de servicio.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
         </Card>
         <Card title="Preferencias">
-          <p className="text-sm text-slate-600">Las animaciones respetan la preferencia del sistema (<code>prefers-reduced-motion</code>). No hay más preferencias por ahora.</p>
+          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reduceMotion} onChange={e => setReduceMotion(e.target.checked)} /> Reducir animaciones</label><p className="mt-2 text-xs text-slate-500">Por defecto se respeta la preferencia del sistema. Podés cambiarla acá; la elección queda guardada en este navegador.</p>
         </Card>
         <Card title="Seguridad">
           <p className="text-sm text-slate-600">La identidad se verifica con Google y las tablas personales aplican políticas RLS para aislar los datos por usuario. La seguridad debe seguir verificándose antes de almacenar información sensible.</p>
