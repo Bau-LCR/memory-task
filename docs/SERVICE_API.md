@@ -17,6 +17,7 @@ Formato: `application/json`
 - Solo después de verificar la sesión propia, ese backend envía el identificador estable del usuario mediante `X-Memory-Task-User-Id`.
 - Ese identificador es una afirmación del backend integrador; la API de Memory Task no puede verificar las sesiones internas de una aplicación externa. Por eso, nunca debe llamarse desde un cliente público con la clave de servicio.
 - Cada clave está vinculada a una aplicación y a una cuenta de servicio. Las operaciones quedan limitadas a esa aplicación y al identificador externo recibido.
+- Permisos disponibles: `records:read`, `records:write`, `files:read` y `files:write`.
 
 ## Encabezados
 
@@ -72,6 +73,30 @@ X-Memory-Task-User-Id: user-123
 }
 ```
 
+### Subir un archivo
+
+Usá `multipart/form-data` con los campos `action=upload_file`, `key`, `category` y `file`. Conservá los mismos encabezados de autorización y usuario externo. El tamaño máximo actual por archivo es 10 MiB.
+
+### Listar archivos
+
+```json
+{ "action": "list_files", "limit": 50 }
+```
+
+### Obtener un enlace temporal de descarga
+
+```json
+{ "action": "download_file", "key": "avatar" }
+```
+
+La respuesta contiene un enlace firmado que vence a los 60 segundos.
+
+### Eliminar un archivo
+
+```json
+{ "action": "delete_file", "key": "avatar" }
+```
+
 ## Categorías
 
 - `user`: datos de perfil y preferencias del usuario externo.
@@ -84,7 +109,7 @@ X-Memory-Task-User-Id: user-123
 
 - Cada registro JSON admite hasta 256 KiB.
 - La cuota es compartida por todas las aplicaciones de una cuenta de servicio.
-- La API implementada gestiona registros JSON; la carga y descarga de archivos binarios todavía necesita su endpoint independiente.
+- La API contempla registros JSON y archivos binarios en un bucket privado. Los enlaces de descarga expiran a los 60 segundos.
 - El límite lógico configurado no amplía el almacenamiento físico disponible en el proyecto Supabase.
 - Las claves pueden revocarse desde Memory Task y dejan de autenticar nuevas solicitudes.
 
