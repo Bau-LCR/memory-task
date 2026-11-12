@@ -149,6 +149,46 @@ Deno.serve(async (req) => {
       return json({ signedUrl: signed.signedUrl, expiresInSeconds: 60 });
     }
 
+    if (action === "delete_user_memory") {
+      const targetId = typeof body.userId === "string" ? body.userId : "";
+      const memoryId = typeof body.memoryId === "string" ? body.memoryId : "";
+      if (!targetId || !memoryId) return json({ error: "Faltan identificadores del usuario o recuerdo." }, 400);
+      const { data: memory, error: readError } = await admin.from("mt_memories")
+        .select("id,title").eq("id", memoryId).eq("owner_id", targetId).maybeSingle();
+      if (readError) throw readError;
+      if (!memory) return json({ error: "No se encontró el recuerdo de ese usuario." }, 404);
+      const { error: deleteError } = await admin.from("mt_memories").delete()
+        .eq("id", memoryId).eq("owner_id", targetId);
+      if (deleteError) throw deleteError;
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, target_user_id: targetId, action: "user_memory_deleted",
+        details: { memory_id: memoryId, title: memory.title },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true });
+    }
+
+    if (action === "delete_user_file") {
+      const targetId = typeof body.userId === "string" ? body.userId : "";
+      const fileId = typeof body.fileId === "string" ? body.fileId : "";
+      if (!targetId || !fileId) return json({ error: "Faltan identificadores del usuario o archivo." }, 400);
+      const { data: file, error: readError } = await admin.from("mt_files")
+        .select("id,name,storage_path").eq("id", fileId).eq("owner_id", targetId).maybeSingle();
+      if (readError) throw readError;
+      if (!file) return json({ error: "No se encontró el archivo de ese usuario." }, 404);
+      const { error: storageError } = await admin.storage.from("memory-task-private").remove([file.storage_path]);
+      if (storageError) throw storageError;
+      const { error: deleteError } = await admin.from("mt_files").delete()
+        .eq("id", fileId).eq("owner_id", targetId);
+      if (deleteError) throw deleteError;
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, target_user_id: targetId, action: "user_file_deleted",
+        details: { file_id: fileId, file_name: file.name },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true });
+    }
+
     if (action === "set_personal_quota") {
       if (actorRole !== "super_admin") return json({ error: "Solo el administrador principal puede modificar cuotas." }, 403);
       const targetId = typeof body.userId === "string" ? body.userId : "";
