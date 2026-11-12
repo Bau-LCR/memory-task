@@ -48,7 +48,7 @@ export function SettingsPage() {
           <Button variant="ghost" className="mt-3" onClick={switchMode}>Cambiar a {other === 'personal' ? 'cuenta personal' : 'cuenta de servicio'}</Button>
         </Card>
         <Card title="Almacenamiento">
-          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente inicial de 50 MiB, compartida entre las aplicaciones. El bucket privado ya está creado; todavía falta implementar y probar las operaciones de archivos de la API de servicio.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
+          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente inicial de 50 MiB, compartida entre las aplicaciones. El bucket privado y las operaciones de carga, consulta y descarga ya están preparados en el código; falta desplegar la función y probarla en Supabase.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
         </Card>
         <Card title="Preferencias">
           <div className="space-y-3">
