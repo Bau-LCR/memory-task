@@ -78,7 +78,7 @@ export function SettingsPage() {
         <Card title="Acceso administrativo a tus datos" action={<Button variant="ghost" onClick={() => void loadAdminAccess()}>Consultar</Button>}>
           <p className="text-sm text-slate-600">Las consultas y modificaciones administrativas de tus recuerdos y archivos se registran. Podés revisar los accesos recientes.</p>
           {auditError && <p role="alert" className="mt-2 text-xs text-red-700">{auditError}</p>}
-          {adminAccess && (adminAccess.length ? <ul className="mt-3 divide-y divide-slate-100">{adminAccess.map((entry, i) => <li key={i} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replaceAll('_', ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)}</p></li>)}</ul> : <p className="mt-2 text-xs text-slate-500">No hay accesos administrativos registrados para tu cuenta.</p>)}
+          {adminAccess && (adminAccess.length ? <ul className="mt-3 divide-y divide-slate-100">{adminAccess.map((entry, i) => <li key={i} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replace(/_/g, ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)}</p></li>)}</ul> : <p className="mt-2 text-xs text-slate-500">No hay accesos administrativos registrados para tu cuenta.</p>)}
         </Card>
         <Card title="Sesiones">
           <p className="text-sm text-slate-600">Sesión autenticada.</p>
