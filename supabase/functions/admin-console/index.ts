@@ -99,14 +99,15 @@ Deno.serve(async (req) => {
       });
       if (auditError) throw auditError;
 
-      const [memories, files, folders, activity, usage] = await Promise.all([
+      const [memories, files, folders, activity, usage, quota] = await Promise.all([
         admin.from("mt_memories").select("id,title,body,category,tags,created_at,updated_at").eq("owner_id", targetId).order("updated_at", { ascending: false }).limit(200),
         admin.from("mt_files").select("id,name,size_bytes,content_type,folder_id,storage_path,created_at").eq("owner_id", targetId).order("created_at", { ascending: false }).limit(500),
         admin.from("mt_folders").select("id,name,parent_id,created_at").eq("owner_id", targetId).order("created_at", { ascending: false }).limit(200),
         admin.from("mt_activity").select("id,description,created_at").eq("owner_id", targetId).order("created_at", { ascending: false }).limit(100),
         admin.from("mt_files").select("size_bytes").eq("owner_id", targetId),
+        admin.from("mt_user_storage_quotas").select("quota_bytes").eq("user_id", targetId).maybeSingle(),
       ]);
-      for (const result of [memories, files, folders, activity, usage]) {
+      for (const result of [memories, files, folders, activity, usage, quota]) {
         if (result.error) throw result.error;
       }
       const usedBytes = (usage.data ?? []).reduce((sum, row) => sum + Number(row.size_bytes || 0), 0);
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
           created_at: target.user.created_at,
           last_sign_in_at: target.user.last_sign_in_at ?? null,
         },
-        usage: { usedBytes, quotaBytes: 52428800 },
+        usage: { usedBytes, quotaBytes: Number(quota.data?.quota_bytes ?? 52428800) },
         memories: memories.data ?? [],
         files: (files.data ?? []).map(({ storage_path: _privatePath, ...file }) => file),
         folders: folders.data ?? [],
@@ -129,8 +130,10 @@ Deno.serve(async (req) => {
     if (action === "create_file_link") {
       const fileId = typeof body.fileId === "string" ? body.fileId : "";
       if (!fileId) return json({ error: "Falta el archivo seleccionado." }, 400);
+      const targetId = typeof body.userId === "string" ? body.userId : "";
+      if (!targetId) return json({ error: "Falta el usuario propietario del archivo." }, 400);
       const { data: file, error: fileError } = await admin.from("mt_files")
-        .select("id,name,storage_path").eq("id", fileId).maybeSingle();
+        .select("id,name,storage_path").eq("id", fileId).eq("owner_id", targetId).maybeSingle();
       if (fileError) throw fileError;
       if (!file) return json({ error: "Archivo no encontrado." }, 404);
       const { data: signed, error: signedError } = await admin.storage
@@ -138,12 +141,36 @@ Deno.serve(async (req) => {
       if (signedError) throw signedError;
       const { error: auditError } = await admin.from("mt_admin_audit").insert({
         actor_id: actorId,
-        target_user_id: typeof body.userId === "string" ? body.userId : null,
+        target_user_id: targetId,
         action: "private_file_access_link_created",
         details: { file_id: file.id, file_name: file.name, expires_in_seconds: 60 },
       });
       if (auditError) throw auditError;
       return json({ signedUrl: signed.signedUrl, expiresInSeconds: 60 });
+    }
+
+    if (action === "set_personal_quota") {
+      if (actorRole !== "super_admin") return json({ error: "Solo el administrador principal puede modificar cuotas." }, 403);
+      const targetId = typeof body.userId === "string" ? body.userId : "";
+      const quotaBytes = Number(body.quotaBytes);
+      if (!targetId || !Number.isSafeInteger(quotaBytes) || quotaBytes < 52428800 || quotaBytes > 5368709120) {
+        return json({ error: "La cuota debe estar entre 50 MiB y 5 GiB." }, 400);
+      }
+      const { data: usedRows, error: usedError } = await admin.from("mt_files")
+        .select("size_bytes").eq("owner_id", targetId);
+      if (usedError) throw usedError;
+      const usedBytes = (usedRows ?? []).reduce((sum, row) => sum + Number(row.size_bytes || 0), 0);
+      if (quotaBytes < usedBytes) return json({ error: "La cuota no puede ser menor que el espacio que ya utiliza esta cuenta." }, 409);
+      const { error: quotaError } = await admin.from("mt_user_storage_quotas").upsert({
+        user_id: targetId, quota_bytes: quotaBytes, updated_by: actorId, updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (quotaError) throw quotaError;
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, target_user_id: targetId, action: "personal_quota_changed",
+        details: { quota_bytes: quotaBytes },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true, quotaBytes });
     }
 
     if (action === "set_role") {
