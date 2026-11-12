@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
+import { supabase } from '../lib/supabase'
 import { useAsync } from '../hooks/useAsync'
 import { go, useSession } from '../app/session'
 import { Bar, Button, Card, Pending, inputCls } from '../components/ui'
-import { download, fmtSize } from '../utils/format'
+import { download, fmtDate, fmtSize } from '../utils/format'
 import type { Mode } from '../types'
 
 export function SettingsPage() {
@@ -15,6 +16,8 @@ export function SettingsPage() {
   const [largeText, setLargeText] = useState(() => localStorage.getItem('mt_large_text') === 'true')
   const [compact, setCompact] = useState(() => localStorage.getItem('mt_compact_layout') === 'true')
   const [highContrast, setHighContrast] = useState(() => localStorage.getItem('mt_high_contrast') === 'true')
+  const [adminAccess, setAdminAccess] = useState<Array<{ action: string; created_at: string; details: Record<string, unknown> }> | null>(null)
+  const [auditError, setAuditError] = useState('')
   useEffect(() => {
     document.documentElement.classList.toggle('mt-reduced-motion', reduceMotion)
     localStorage.setItem('mt_reduce_motion', String(reduceMotion))
@@ -33,6 +36,16 @@ export function SettingsPage() {
   const switchMode = async () => { await api.setMode(other); await refresh(); go(other === 'personal' ? '/panel' : '/servicio') }
   const exportData = async () => download(new Blob([JSON.stringify(await api.exportAll(), null, 2)], { type: 'application/json' }), 'memory-task-export.json')
   const reset = async () => { if (confirm('Esta acción solo reinicia datos locales de demostración. Los datos de la nube no se borrarán. ¿Continuar?')) { await api.resetDemo(); await refresh(); go('/') } }
+  const loadAdminAccess = async () => {
+    if (!supabase) return
+    setAuditError('')
+    try {
+      const { data, error } = await supabase.functions.invoke('account-consent', { body: { action: 'admin_access_log' } })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      setAdminAccess(data.entries ?? [])
+    } catch (e) { setAuditError((e as Error).message) }
+  }
   const signOut = async () => { await api.signOut(); await refresh(); go('/') }
   return (
     <>
@@ -61,6 +74,11 @@ export function SettingsPage() {
         </Card>
         <Card title="Seguridad">
           <p className="text-sm text-slate-600">La identidad se verifica con Google y las tablas personales aplican políticas RLS para aislar los datos por usuario. La seguridad debe seguir verificándose antes de almacenar información sensible.</p>
+        </Card>
+        <Card title="Acceso administrativo a tus datos" action={<Button variant="ghost" onClick={() => void loadAdminAccess()}>Consultar</Button>}>
+          <p className="text-sm text-slate-600">Las consultas y modificaciones administrativas de tus recuerdos y archivos se registran. Podés revisar los accesos recientes.</p>
+          {auditError && <p role="alert" className="mt-2 text-xs text-red-700">{auditError}</p>}
+          {adminAccess && (adminAccess.length ? <ul className="mt-3 divide-y divide-slate-100">{adminAccess.map((entry, i) => <li key={i} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replaceAll('_', ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)}</p></li>)}</ul> : <p className="mt-2 text-xs text-slate-500">No hay accesos administrativos registrados para tu cuenta.</p>)}
         </Card>
         <Card title="Sesiones">
           <p className="text-sm text-slate-600">Sesión autenticada.</p>
