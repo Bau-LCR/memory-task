@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../../services/api'
 import { go, useSession } from '../../app/session'
 import { Button, DemoBadge, Badge, Logo, cx } from '../ui'
 import type { Mode } from '../../types'
+import { supabase } from '../../lib/supabase'
 
 const NAV: Record<Mode, ReadonlyArray<readonly [string, string]>> = {
   personal: [['/panel', 'Panel'], ['/archivos', 'Archivos'], ['/recuerdos', 'Recuerdos'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
@@ -12,6 +13,15 @@ const NAV: Record<Mode, ReadonlyArray<readonly [string, string]>> = {
 export function Shell({ path, children }: { path: string; children: ReactNode }) {
   const { session, refresh } = useSession()
   const [open, setOpen] = useState(false)
+  const [canAdmin, setCanAdmin] = useState(false)
+  useEffect(() => {
+    let active = true
+    if (!supabase || session?.demo) return
+    supabase.functions.invoke('admin-console', { body: { action: 'check_access' } })
+      .then(({ data, error }) => { if (active && !error) setCanAdmin(data?.role === 'admin' || data?.role === 'super_admin') })
+      .catch(() => { if (active) setCanAdmin(false) })
+    return () => { active = false }
+  }, [session?.email, session?.demo])
   if (!session?.mode) return null
   const signOut = async () => { await api.signOut(); await refresh(); go('/') }
   return (
@@ -19,7 +29,7 @@ export function Shell({ path, children }: { path: string; children: ReactNode })
       <aside className={cx(open ? 'block' : 'hidden', 'bg-navy p-4 text-slate-200 md:block md:w-60 md:shrink-0')}>
         <Logo light />
         <nav className="mt-6 space-y-1" aria-label="Principal">
-          {NAV[session.mode].map(([to, label]) => (
+          {NAV[session.mode].filter(([to]) => to !== '/admin' || canAdmin).map(([to, label]) => (
             <a key={to} href={`#${to}`} onClick={() => setOpen(false)}
               className={cx('block rounded-lg px-3 py-2 text-sm transition motion-reduce:transition-none', path === to ? 'bg-brand text-white' : 'hover:bg-navy-800')}>
               {label}
