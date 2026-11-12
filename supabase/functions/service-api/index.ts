@@ -163,7 +163,11 @@ Deno.serve(async (req) => {
         if (error.code === "23514") return json({ error: "Se alcanzó la cuota compartida de servicio." }, 413);
         throw error;
       }
-      await audit(admin, key.account_id, key.app_id, "file_uploaded", externalUserId, { object_key: objectKey, file_name: safeName, size_bytes: file.size });
+      if (previousFile?.storage_path) {
+        const { error: cleanupError } = await admin.storage.from("memory-task-service-private").remove([previousFile.storage_path]);
+        if (cleanupError) console.error("No se pudo limpiar el archivo anterior:", cleanupError.message);
+      }
+      await audit(admin, key.account_id, key.app_id, "file_uploaded", externalUserId, { object_key: objectKey, file_name: safeName, size_bytes: file.size, replaced: Boolean(previousFile) });
       return json({ file: data }, 201);
     }
 
