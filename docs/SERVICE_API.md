@@ -1,35 +1,79 @@
-# Memory Task — API de registros de servicio
+# Memory Task — API de servicio
 
 ## Estado
 
-La función está implementada en `supabase/functions/service-api/index.ts`. Para usarla, el propietario debe desplegarla en Supabase con el nombre `service-api` después de aplicar las migraciones correspondientes. En la configuración de esa función, desactivá **Verify JWT** en la puerta de enlace de Supabase: la función valida su propia clave `mt_live_...`. Esta excepción se aplica solo a `service-api`; las funciones administrativas deben conservar la verificación JWT.
+La función está implementada en `supabase/functions/service-api/index.ts`. Para activarla, desplegala en Supabase con el nombre `service-api` después de aplicar las migraciones.
 
 Endpoint:
 `https://<PROJECT_REF>.supabase.co/functions/v1/service-api`
 
-Método: `POST`
-Formato: `application/json`
+Método: `POST`. Los registros usan JSON; la carga de archivos usa `multipart/form-data`.
 
-## Seguridad obligatoria
+En Supabase, desactivá **Verify JWT** solamente para `service-api`: esta función valida su propia clave `mt_live_...` y una identidad firmada ES256. Las funciones administrativas deben conservar Verify JWT activado.
 
-- La clave `mt_live_...` es un secreto de servidor. No la incluyas en JavaScript del navegador, aplicaciones móviles distribuidas, repositorios públicos ni APKs.
-- El backend de la aplicación que integra Memory Task debe autenticar primero a su propio usuario.
-- Solo después de verificar la sesión propia, ese backend envía el identificador estable del usuario mediante `X-Memory-Task-User-Id`.
-- Ese identificador es una afirmación del backend integrador; la API de Memory Task no puede verificar las sesiones internas de una aplicación externa. Por eso, nunca debe llamarse desde un cliente público con la clave de servicio.
-- Cada clave está vinculada a una aplicación y a una cuenta de servicio. Las operaciones quedan limitadas a esa aplicación y al identificador externo recibido.
-- Permisos disponibles: `records:read`, `records:write`, `files:read` y `files:write`.
+## Seguridad de identidad externa
+
+Memory Task no acepta un identificador externo sin comprobarlo. Cada aplicación debe registrar una clave pública ECDSA P-256 (ES256) en la consola.
+
+1. Tu backend genera un par de claves ES256.
+2. Registrás la clave pública JWK en la aplicación correspondiente desde Memory Task.
+3. La clave privada queda exclusivamente en el backend de tu aplicación. Nunca se sube a Memory Task ni se incluye en una web o APK.
+4. Cuando un usuario inicia sesión en tu aplicación, tu backend firma un token de identidad de corta duración (máximo cinco minutos).
+5. Memory Task verifica la firma y toma el identificador externo del campo `sub` firmado. No confía en un ID enviado libremente por el cliente.
+
+La clave API por sí sola no permite elegir la identidad de otro usuario. El backend integrador debe autenticar al usuario antes de firmar su token.
+
+## Generar y registrar la clave pública
+
+Ejemplo para Node.js usando el paquete `jose`:
+
+```js
+import { generateKeyPair, exportJWK } from "jose";
+
+const { publicKey, privateKey } = await generateKeyPair("ES256");
+const publicJwk = await exportJWK(publicKey);
+
+// Registrá publicJwk en Memory Task > Cuenta de servicio
+// > Aplicaciones registradas > Configurar identidad.
+
+// Guardá privateKey de forma segura en tu backend.
+// No la publiques ni la envíes al navegador.
+```
+
+En Memory Task pegá solo el objeto JWK público, con `kty`, `crv`, `x` e `y`. La consola rechaza una clave que incluya el parámetro privado `d`.
+
+## Firmar la identidad de un usuario
+
+Después de autenticar al usuario en tu propio backend:
+
+```js
+import { SignJWT } from "jose";
+
+const identityToken = await new SignJWT({})
+  .setProtectedHeader({ alg: "ES256" })
+  .setIssuer(memoryTaskAppId)
+  .setAudience(memoryTaskAppId)
+  .setSubject(authenticatedUser.id)
+  .setIssuedAt()
+  .setExpirationTime("2m")
+  .sign(privateKey);
+```
+
+Enviá ese token en el encabezado `X-Memory-Task-Identity`. La aplicación debe generar un token nuevo para cada solicitud o sesión de usuario; no lo guardes en el navegador.
 
 ## Encabezados
 
 ```http
 Authorization: Bearer mt_live_YOUR_SECRET
 Content-Type: application/json
-X-Memory-Task-User-Id: user-123
+X-Memory-Task-Identity: <signed-ES256-token>
 ```
 
-## Acciones
+La clave API y la clave privada son secretos de servidor. No las incluyas en JavaScript público, repositorios abiertos ni APKs.
 
-### Guardar o actualizar un registro
+## Registros JSON
+
+### Guardar o actualizar
 
 ```json
 {
@@ -38,52 +82,49 @@ X-Memory-Task-User-Id: user-123
   "category": "user",
   "data": {
     "displayName": "Usuario de ejemplo",
-    "preferences": {
-      "language": "es"
-    }
+    "preferences": { "language": "es" }
   }
 }
 ```
 
-### Leer un registro
+### Leer
 
 ```json
-{
-  "action": "get",
-  "key": "profile"
-}
+{ "action": "get", "key": "profile" }
 ```
 
-### Listar registros
+### Listar
 
 ```json
-{
-  "action": "list",
-  "category": "chat",
-  "limit": 50
-}
+{ "action": "list", "category": "chat", "limit": 50 }
 ```
 
-### Eliminar un registro
+### Eliminar
 
 ```json
-{
-  "action": "delete",
-  "key": "profile"
-}
+{ "action": "delete", "key": "profile" }
 ```
 
-### Subir un archivo
+## Archivos privados
 
-Usá `multipart/form-data` con los campos `action=upload_file`, `key`, `category` y `file`. Conservá los mismos encabezados de autorización y usuario externo. El tamaño máximo actual por archivo es 10 MiB.
+### Subir
 
-### Listar archivos
+Usá `multipart/form-data` con estos campos:
+
+- `action`: `upload_file`
+- `key`: identificador del archivo dentro del usuario externo
+- `category`: `document`, `image` o `custom`
+- `file`: contenido del archivo
+
+El tamaño máximo actual es 10 MiB por archivo.
+
+### Listar
 
 ```json
 { "action": "list_files", "limit": 50 }
 ```
 
-### Obtener un enlace temporal de descarga
+### Descargar
 
 ```json
 { "action": "download_file", "key": "avatar" }
@@ -91,53 +132,32 @@ Usá `multipart/form-data` con los campos `action=upload_file`, `key`, `category
 
 La respuesta contiene un enlace firmado que vence a los 60 segundos.
 
-### Eliminar un archivo
+### Eliminar
 
 ```json
 { "action": "delete_file", "key": "avatar" }
 ```
 
-## Categorías
+## Categorías y estructura sugerida
 
-- `user`: datos de perfil y preferencias del usuario externo.
-- `chat`: conversaciones y mensajes estructurados.
-- `document`: datos y metadatos de documentos.
-- `image`: metadatos asociados a imágenes.
-- `custom`: cualquier estructura JSON propia de la aplicación.
+- `user`: perfil, preferencias y atributos del usuario.
+- `chat`: conversación y mensajes estructurados, por ejemplo `{ "conversationId": "...", "messages": [{ "role": "user", "content": "..." }] }`.
+- `document`: título, tipo, origen, metadatos y/o archivo asociado.
+- `image`: texto alternativo, tipo, dimensiones, metadatos y/o archivo asociado.
+- `custom`: cualquier objeto JSON propio de la aplicación.
+
+La categoría queda registrada para estadísticas y filtros. La estructura interna del JSON la define la aplicación integradora.
+
+## Permisos de claves
+
+- `records:read` y `records:write`: lectura y escritura de registros JSON.
+- `files:read` y `files:write`: listado/descarga y carga/eliminación de archivos.
 
 ## Límites actuales
 
 - Cada registro JSON admite hasta 256 KiB.
-- La cuota es compartida por todas las aplicaciones de una cuenta de servicio.
-- La API contempla registros JSON y archivos binarios en un bucket privado. Los enlaces de descarga expiran a los 60 segundos.
-- El límite lógico configurado no amplía el almacenamiento físico disponible en el proyecto Supabase.
-- Las claves pueden revocarse desde Memory Task y dejan de autenticar nuevas solicitudes.
-
-## Ejemplo desde un backend Node.js
-
-```js
-const response = await fetch(
-  "https://<PROJECT_REF>.supabase.co/functions/v1/service-api",
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.MEMORY_TASK_API_KEY}`,
-      "Content-Type": "application/json",
-      "X-Memory-Task-User-Id": authenticatedUser.id
-    },
-    body: JSON.stringify({
-      action: "put",
-      key: "profile",
-      category: "user",
-      data: { displayName: "Usuario de ejemplo" }
-    })
-  }
-);
-
-if (!response.ok) {
-  throw new Error("Memory Task API: " + response.status);
-}
-const result = await response.json();
-```
-
-No uses este ejemplo directamente en el navegador. `authenticatedUser.id` debe provenir de la sesión que tu propio servidor ya verificó.
+- Cada archivo admite hasta 10 MiB.
+- La cuota de almacenamiento es compartida entre todas las aplicaciones de la cuenta de servicio.
+- El límite lógico no amplía el espacio físico disponible en el proyecto Supabase.
+- Las claves API se muestran una sola vez y pueden revocarse desde la consola.
+- La actividad de lectura, escritura, carga, descarga y eliminación queda registrada en la auditoría de la cuenta de servicio.
