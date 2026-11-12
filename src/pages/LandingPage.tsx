@@ -26,7 +26,7 @@ export function LandingPage() {
             </div>
           ))}
         </div>
-        <p className="mt-10 text-xs text-slate-400">Versión de desarrollo: funciona en tu navegador con datos de demostración. Aún no hay servidor ni cuentas reales, y el almacenamiento será limitado.</p>
+        <p className="mt-10 text-xs text-slate-400">Memory Task utiliza cuentas autenticadas y almacenamiento privado. Algunas funciones avanzadas, incluida la API pública de servicios, continúan en desarrollo.</p>
       </section>
     </div>
   )
