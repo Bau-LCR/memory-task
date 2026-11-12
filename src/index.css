@@ -29,3 +29,12 @@
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+html.mt-large-text body { font-size: 17px; }
+html.mt-compact-layout main { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+html.mt-compact-layout main > * { margin-top: 0.75rem; }
+html.mt-high-contrast .text-slate-500,
+html.mt-high-contrast .text-slate-600,
+html.mt-high-contrast .text-slate-400 { color: #334155 !important; }
+html.mt-high-contrast .border-slate-200,
+html.mt-high-contrast .border-slate-300 { border-color: #64748b !important; }
