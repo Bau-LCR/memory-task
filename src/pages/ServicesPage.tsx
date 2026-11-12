@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { Badge, Button, Card, inputCls } from '../components/ui'
-import { fmtSize } from '../utils/format'
+import { fmtDate, fmtSize } from '../utils/format'
 
 type ServiceApp = { id: string; name: string; description: string; status: string; created_at: string; objectCount: number; externalUserCount: number; usedBytes: number; categories: Record<string, { count: number; bytes: number }> }
 type ServiceKey = { id: string; app_id: string; name: string; key_prefix: string; scopes: string[]; status: string; created_at: string; last_used_at: string | null }
-type Overview = { account: { id: string; quotaBytes: number; usedBytes: number }; apps: ServiceApp[]; keys: ServiceKey[] }
+type Overview = { account: { id: string; quotaBytes: number; usedBytes: number }; apps: ServiceApp[]; keys: ServiceKey[]; audit: Array<{ id: string; action: string; details: Record<string, unknown>; created_at: string }> }
 
 async function callService<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error('Supabase no está configurado.')
@@ -133,6 +133,9 @@ export function ServicesPage() {
       </Card>}
       <Card title="Claves API">
         {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}</li>)}</ul>}
+      </Card>
+      <Card title="Actividad reciente de las aplicaciones">
+        {overview?.audit?.length ? <ul className="divide-y divide-slate-100">{overview.audit.map(entry => <li key={entry.id} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replaceAll('_', ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)} · App: {String(entry.details.app_id ?? '—')} · Usuario externo: {String(entry.details.external_user_id ?? '—')}</p></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no hay actividad de API registrada.</p>}
       </Card>
       <Card title="API de registros">
         <p className="text-sm text-slate-600">La función de API ya está preparada en el repositorio. Después de desplegarla, tus servidores podrán guardar, consultar, listar y eliminar registros JSON por usuario externo y categoría.</p>
