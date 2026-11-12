@@ -162,7 +162,7 @@ describe('cuenta de servicio', () => {
     await loginAs('service')
     await heading('Cuenta de servicio')
     expect(screen.getByText(/El backend todavía no está desplegado/)).toBeTruthy()
-    expect(screen.getByText('En desarrollo')).toBeTruthy()
+    expect(screen.getByText('Consola disponible')).toBeTruthy()
     expect((await screen.findByRole('alert')).textContent).toContain('Supabase no está configurado.')
     expect(isDisabled(screen.getByRole('button', { name: 'Crear aplicación' }))).toBe(true)
   })
