@@ -43,12 +43,18 @@ language sql
 stable
 security definer
 set search_path = ''
-as $$
-  select coalesce(
-    (select quota_bytes from public.mt_user_storage_quotas where user_id = p_user_id),
+as $
+begin
+  if auth.uid() is not null and auth.uid() <> p_user_id then
+    raise exception 'No autorizado para consultar la cuota de otro usuario.'
+      using errcode = 'insufficient_privilege';
+  end if;
+  return coalesce(
+    (select q.quota_bytes from public.mt_user_storage_quotas q where q.user_id = p_user_id),
     52428800::bigint
   );
-$$;
+end;
+$;
 revoke all on function public.mt_personal_quota_for(uuid) from public, anon, authenticated;
 grant execute on function public.mt_personal_quota_for(uuid) to authenticated, service_role;
 
@@ -68,7 +74,7 @@ begin
     into used_bytes
     from public.mt_files
    where owner_id = new.owner_id and id <> new.id;
-  if used_bytes + new.size_bytes > quota_bytes then
+  if used_bytes + new.size_bytes > v_quota_bytes then
     raise exception 'Se alcanzó la cuota de almacenamiento personal configurada.'
       using errcode = 'check_violation';
   end if;
@@ -126,13 +132,13 @@ set search_path = ''
 as $$
 declare
   used_bytes bigint;
-  quota_bytes bigint;
+  v_quota_bytes bigint;
 begin
   perform pg_advisory_xact_lock(hashtextextended(new.account_id::text, 1));
-  select quota_bytes into quota_bytes
-    from public.mt_service_accounts
-   where id = new.account_id;
-  if quota_bytes is null then
+  select a.quota_bytes into v_quota_bytes
+    from public.mt_service_accounts a
+   where a.id = new.account_id;
+  if v_quota_bytes is null then
     raise exception 'No se encontró la cuenta de servicio.'
       using errcode = 'foreign_key_violation';
   end if;
