@@ -158,13 +158,13 @@ describe('archivos (flujo completo)', () => {
 })
 
 describe('cuenta de servicio', () => {
-  it('es ilustrativa: avisa y todos los botones de acción están desactivados', async () => {
+  it('muestra la consola en desarrollo y avisa cuando Supabase no está configurado', async () => {
     await loginAs('service')
     await heading('Cuenta de servicio')
-    expect(screen.getByText(/todavía no tiene backend/)).toBeTruthy()
-    for (const label of ['Crear espacio', 'Agregar usuario', 'Crear sector', 'Generar clave', 'Conectar']) {
-      expect(isDisabled(screen.getByRole('button', { name: label }))).toBe(true)
-    }
+    expect(screen.getByText(/El backend todavía no está desplegado/)).toBeTruthy()
+    expect(screen.getByText('En desarrollo')).toBeTruthy()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Supabase no está configurado.')
+    expect(screen.getByRole('button', { name: 'Crear aplicación' })).toBeDisabled()
   })
 })
 
