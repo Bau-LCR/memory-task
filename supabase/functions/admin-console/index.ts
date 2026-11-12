@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       return json({ error: "Configuración del servidor incompleta." }, 500);
     }
 
-    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\\s+/i, "");
+    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
     if (!token) return json({ error: "Sesión requerida." }, 401);
 
     const authClient = createClient(url, anonKey, {
