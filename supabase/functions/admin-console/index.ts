@@ -194,6 +194,31 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    if (action === "publish_legal_document") {
+      if (actorRole !== "super_admin") return json({ error: "Solo el administrador principal puede publicar documentos legales." }, 403);
+      const documentType = body.documentType;
+      const version = typeof body.version === "string" ? body.version.trim() : "";
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      const content = typeof body.content === "string" ? body.content.trim() : "";
+      if (!["terms", "privacy"].includes(documentType) || !/^\\d+\\.\\d+(?:\\.\\d+)?$/.test(version) ||
+          !title || title.length > 120 || content.length < 100 || content.length > 20000) {
+        return json({ error: "Tipo, versión (por ejemplo 1.1), título y contenido válido son obligatorios." }, 400);
+      }
+      const { error: insertError } = await admin.from("mt_legal_documents").insert({
+        document_type: documentType, version, title, content, published_at: new Date().toISOString(),
+      });
+      if (insertError) {
+        if (insertError.code === "23505") return json({ error: "Esa versión ya existe. Elegí un número de versión nuevo." }, 409);
+        throw insertError;
+      }
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, action: "legal_document_published",
+        details: { document_type: documentType, version, title },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true, documentType, version });
+    }
+
     if (action === "set_personal_quota") {
       if (actorRole !== "super_admin") return json({ error: "Solo el administrador principal puede modificar cuotas." }, 403);
       const targetId = typeof body.userId === "string" ? body.userId : "";
