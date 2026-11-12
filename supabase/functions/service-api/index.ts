@@ -14,6 +14,38 @@ async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
+function decodeBase64Url(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+}
+async function verifyIdentityAssertion(token: string, appId: string, publicJwk: JsonWebKey | null): Promise<string | null> {
+  if (!publicJwk || token.length > 4096) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const header = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0])));
+    const claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1])));
+    if (header.alg !== "ES256" || typeof claims.sub !== "string" || !claims.sub.trim() ||
+        claims.sub.length > 200 || claims.iss !== appId ||
+        !(claims.aud === appId || (Array.isArray(claims.aud) && claims.aud.includes(appId)))) return null;
+    const now = Math.floor(Date.now() / 1000);
+    if (!Number.isInteger(claims.exp) || claims.exp <= now || claims.exp > now + 300 ||
+        !Number.isInteger(claims.iat) || claims.iat > now + 60 || claims.iat < now - 300) return null;
+    const publicKey = await crypto.subtle.importKey(
+      "jwk", publicJwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"],
+    );
+    const valid = await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      publicKey,
+      decodeBase64Url(parts[2]),
+      encoder.encode(parts[0] + "." + parts[1]),
+    );
+    return valid ? claims.sub.trim() : null;
+  } catch {
+    return null;
+  }
+}
 async function audit(admin: any, accountId: string, appId: string, action: string, externalUserId: string, details: Record<string, unknown> = {}) {
   const { error } = await admin.from("mt_service_audit").insert({
     account_id: accountId,
@@ -33,11 +65,6 @@ Deno.serve(async (req) => {
     const authorization = req.headers.get("Authorization") ?? "";
     const apiKey = authorization.replace(/^Bearer\s+/i, "").trim();
     if (!apiKey.startsWith("mt_live_") || apiKey.length < 40) return json({ error: "Clave API inválida." }, 401);
-    const externalUserId = (req.headers.get("X-Memory-Task-User-Id") ?? "").trim();
-    if (!externalUserId || externalUserId.length > 200) {
-      return json({ error: "Falta X-Memory-Task-User-Id. Enviá el identificador autenticado desde el servidor de tu aplicación." }, 400);
-    }
-
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const hash = await sha256(apiKey);
     const { data: key, error: keyError } = await admin.from("mt_service_api_keys")
@@ -48,9 +75,14 @@ Deno.serve(async (req) => {
       return json({ error: "Clave API inválida, revocada o vencida." }, 401);
     }
     const { data: app, error: appError } = await admin.from("mt_service_apps")
-      .select("id,status").eq("id", key.app_id).eq("account_id", key.account_id).maybeSingle();
+      .select("id,status,identity_public_key").eq("id", key.app_id).eq("account_id", key.account_id).maybeSingle();
     if (appError) throw appError;
     if (!app || app.status !== "active") return json({ error: "La aplicación está suspendida o no existe." }, 403);
+    const identityToken = req.headers.get("X-Memory-Task-Identity") ?? "";
+    const externalUserId = await verifyIdentityAssertion(identityToken, app.id, app.identity_public_key as JsonWebKey | null);
+    if (!externalUserId) {
+      return json({ error: "Identidad externa inválida. Tu backend debe firmar un token ES256 para el usuario autenticado." }, 401);
+    }
 
     const isMultipart = (req.headers.get("content-type") ?? "").includes("multipart/form-data");
     const body: any = isMultipart ? await req.formData() : await req.json().catch(() => null);
