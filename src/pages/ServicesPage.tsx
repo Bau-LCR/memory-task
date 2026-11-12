@@ -21,6 +21,7 @@ export function ServicesPage() {
   const [description, setDescription] = useState('')
   const [keyName, setKeyName] = useState('')
   const [keyAppId, setKeyAppId] = useState('')
+  const [keyScopes, setKeyScopes] = useState<string[]>(['records:read', 'records:write'])
   const [newSecret, setNewSecret] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -83,7 +84,7 @@ export function ServicesPage() {
     try {
       const result = await callService<{ secret: string }>({
         action: 'create_key', appId: keyAppId, name: keyName,
-        scopes: ['records:read', 'records:write', 'files:read', 'files:write'],
+        scopes: keyScopes,
       })
       setNewSecret(result.secret)
       setKeyName(''); setKeyAppId('')
@@ -137,7 +138,7 @@ export function ServicesPage() {
         </form>
       </Card>
       <Card title="Aplicaciones registradas" action={<Button variant="ghost" onClick={() => void load()} disabled={busy}>Actualizar</Button>}>
-        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Badge tone={app.identityConfigured ? 'blue' : 'amber'}>{app.identityConfigured ? 'Identidad configurada' : 'Falta identidad'}</Badge><Button variant="ghost" onClick={() => { setIdentityAppId(app.id); setIdentityJwkText('') }}>Configurar identidad</Button><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción') }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
+        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Badge tone={app.identityConfigured ? 'blue' : 'amber'}>{app.identityConfigured ? 'Identidad configurada' : 'Falta identidad'}</Badge><Button variant="ghost" onClick={() => { setIdentityAppId(app.id); setIdentityJwkText('') }}>Configurar identidad</Button><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción'); setKeyScopes(['records:read', 'records:write']) }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
       </Card>
       {identityAppId && <Card title="Configurar identidad de usuarios externos">
         <p className="text-sm text-slate-600">Pegá únicamente la clave pública JWK ECDSA P-256 de tu aplicación. La clave privada se queda en el servidor de tu aplicación y firma una identidad de corta duración para cada usuario autenticado.</p>
@@ -147,10 +148,10 @@ export function ServicesPage() {
       {keyAppId && <Card title="Generar clave API">
         <form onSubmit={createKey} className="flex flex-wrap gap-2">
           <input className={inputCls + ' min-w-48 flex-1'} value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Nombre de la clave" maxLength={80} required />
-          <Button type="submit" disabled={busy || !keyName.trim()}>Generar</Button>
+          <Button type="submit" disabled={busy || !keyName.trim() || keyScopes.length === 0}>Generar</Button>
           <Button type="button" variant="ghost" onClick={() => setKeyAppId('')}>Cancelar</Button>
         </form>
-        <p className="mt-2 text-xs text-slate-500">Permisos iniciales: lectura y escritura de registros y archivos. La clave se muestra una sola vez.</p>
+        <div className="mt-3 flex flex-wrap gap-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('records:read')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'records:read'] : v.filter(x => x !== 'records:read'))} /> Leer registros</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('records:write')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'records:write'] : v.filter(x => x !== 'records:write'))} /> Escribir registros</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('files:read')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'files:read'] : v.filter(x => x !== 'files:read'))} /> Leer archivos</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('files:write')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'files:write'] : v.filter(x => x !== 'files:write'))} /> Escribir archivos</label></div><p className="mt-2 text-xs text-slate-500">Elegí solo los permisos que necesita la integración. La clave se muestra una sola vez.</p>
       </Card>}
       <Card title="Claves API">
         {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}</li>)}</ul>}
