@@ -40,12 +40,12 @@ export function FilesPage() {
     e.preventDefault()
     run(async () => { await api.createFolder(newName ?? '', folderId); setNewName(null) })
   }
-  const open = async (id: string, name: string) => { const b = await api.getFile(id); if (b) download(b, name) }
+  const open = async (id: string, name: string) => { try { const b = await api.getFile(id); if (b) download(b, name) } catch (e) { setErrors([(e as Error).message]) } }
 
   return (
     <>
       <h1 className="text-2xl font-bold text-navy">Archivos</h1>
-      <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Modo demostración: los archivos que selecciones no se suben a ningún servidor. Solo nombre y tamaño se guardan en este navegador; el contenido se conserva hasta que recargues la página. Máximo {fmtSize(MAX_FILE)} por archivo.</p>
+      <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Los archivos se guardan en tu espacio privado de la nube. Cuota personal: 50 MB en total. Máximo {fmtSize(MAX_FILE)} por archivo.</p>
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <label className="cursor-pointer rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600">
@@ -84,7 +84,7 @@ export function FilesPage() {
                   <option value="">Raíz</option>
                   {folders.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-                <Button variant="ghost" disabled={!api.hasFile(f.id)} title={api.hasFile(f.id) ? '' : 'El contenido no se conserva tras recargar la página'} onClick={() => open(f.id, f.name)}>Descargar</Button>
+                <Button variant="ghost" onClick={() => open(f.id, f.name)}>Descargar</Button>
                 <Button variant="danger" onClick={() => { if (confirm(`¿Eliminar "${f.name}"?`)) run(() => api.removeFile(f.id)) }}>Eliminar</Button>
               </li>
             ))}

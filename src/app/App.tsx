@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { api } from '../services/api'
 import type { Session } from '../types'
 import { SessionCtx, go } from './session'
+import { supabase } from '../lib/supabase'
 import { Shell } from '../components/layout/Shell'
 import { LandingPage } from '../pages/LandingPage'
 import { LoginPage } from '../pages/LoginPage'
@@ -33,10 +34,23 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [ready, setReady] = useState(false)
   const refresh = async () => setSession(await api.session())
-  useEffect(() => { refresh().then(() => setReady(true)) }, [])
+  useEffect(() => {
+    let active = true
+    // Suscribirse antes de consultar la sesión evita perder un cambio de autenticación
+    // que ocurra mientras Supabase procesa el retorno OAuth.
+    const subscription = supabase?.auth.onAuthStateChange(() => {
+      Promise.resolve().then(() => { if (active) void refresh() })
+    }).data.subscription
+    refresh().finally(() => { if (active) setReady(true) })
+    return () => {
+      active = false
+      subscription?.unsubscribe()
+    }
+  }, [])
 
   let view: ReactElement
   if (!ready) view = <p className="p-8 text-slate-500">Cargando…</p>
+  else if (path === '/' && session && !session.demo) view = <Redirect to={session.mode ? (session.mode === 'personal' ? '/panel' : '/servicio') : '/modo'} />
   else if (path === '/') view = <LandingPage />
   else if (path === '/login') view = <LoginPage />
   else if (!session) view = <Redirect to="/login" />

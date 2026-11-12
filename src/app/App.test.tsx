@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+vi.mock('../lib/supabase', () => ({ supabase: null, isSupabaseConfigured: false }))
+import { isSupabaseConfigured } from '../lib/supabase'
 
 const goTo = (hash: string) => { window.location.hash = hash }
 const isDisabled = (el: HTMLElement) => (el as HTMLButtonElement | HTMLInputElement).disabled
@@ -30,12 +32,16 @@ describe('navegación y protección de rutas', () => {
     expect(await heading('Iniciar sesión')).toBeTruthy()
     expect(window.location.hash).toBe('#/login')
   })
-  it('el botón de Google está desactivado e indica que está pendiente', async () => {
+  it('el botón de Google refleja si Supabase está configurado', async () => {
     goTo('/login')
     render(<App />)
-    const g = await screen.findByRole('button', { name: /Continuar con Google/ })
-    expect(isDisabled(g)).toBe(true)
-    expect(g.textContent).toContain('pendiente')
+    const g = await screen.findByRole('button', { name: /Google/ })
+    expect(isDisabled(g)).toBe(!isSupabaseConfigured)
+    if (isSupabaseConfigured) {
+      expect(g.textContent).toContain('Continuar con Google')
+    } else {
+      expect(g.textContent).toContain('pendiente')
+    }
   })
   it('con sesión pero sin modalidad, redirige a elegir modalidad', async () => {
     const user = userEvent.setup()
@@ -169,7 +175,7 @@ describe('ajustes', () => {
     await user.click(sidebarLink('Ajustes'))
     await heading('Ajustes')
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await user.click(screen.getByRole('button', { name: 'Borrar datos de demostración' }))
+    await user.click(screen.getByRole('button', { name: 'Reiniciar datos locales' }))
     await heading(/Memoria y almacenamiento/)
     expect(Object.keys(localStorage).filter((k) => k.startsWith('mt:demo:'))).toHaveLength(0)
   })

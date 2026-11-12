@@ -1,27 +1,126 @@
-import { Bar, Badge, Card, Pending } from '../components/ui'
-import { SERVICE_SECTIONS, SERVICE_STATS, SERVICE_USAGE } from '../features/service-accounts/demoData'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { supabase } from '../lib/supabase'
+import { Badge, Button, Card, inputCls } from '../components/ui'
+import { fmtSize } from '../utils/format'
+
+type ServiceApp = { id: string; name: string; description: string; status: string; created_at: string }
+type ServiceKey = { id: string; app_id: string; name: string; key_prefix: string; scopes: string[]; status: string; created_at: string; last_used_at: string | null }
+type Overview = { account: { id: string; quotaBytes: number; usedBytes: number }; apps: ServiceApp[]; keys: ServiceKey[] }
+
+async function callService<T>(body: Record<string, unknown>): Promise<T> {
+  if (!supabase) throw new Error('Supabase no está configurado.')
+  const { data, error } = await supabase.functions.invoke('service-console', { body })
+  if (error) throw new Error(error.message || 'No se pudo contactar con el backend.')
+  if (data?.error) throw new Error(data.error)
+  return data as T
+}
 
 export function ServicesPage() {
+  const [overview, setOverview] = useState<Overview | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [keyName, setKeyName] = useState('')
+  const [keyAppId, setKeyAppId] = useState('')
+  const [newSecret, setNewSecret] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const load = useCallback(async () => {
+    setBusy(true)
+    setError('')
+    try { setOverview(await callService<Overview>({ action: 'overview' })) }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const createApp = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await callService({ action: 'create_app', name, description })
+      setName(''); setDescription(''); setNotice('Aplicación creada correctamente.')
+      await load()
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const createKey = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!keyAppId) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const result = await callService<{ secret: string }>({
+        action: 'create_key', appId: keyAppId, name: keyName,
+        scopes: ['records:read', 'records:write'],
+      })
+      setNewSecret(result.secret)
+      setKeyName(''); setKeyAppId('')
+      setNotice('Clave creada. Copiala ahora: no volverá a mostrarse.')
+      await load()
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const revokeKey = async (keyId: string) => {
+    if (!confirm('¿Revocar esta clave? Las integraciones que la utilicen dejarán de autenticarse.')) return
+    setBusy(true); setError('')
+    try { await callService({ action: 'revoke_key', keyId }); setNotice('Clave revocada.'); await load() }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const copySecret = async () => {
+    await navigator.clipboard.writeText(newSecret)
+    setNotice('Clave copiada al portapapeles.')
+  }
+
+  const used = overview?.account.usedBytes ?? 0
+  const quota = overview?.account.quotaBytes ?? 52428800
+  const pct = quota ? Math.min(100, used / quota * 100) : 0
+
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold text-navy">Cuenta de servicio</h1>
-        <Badge tone="amber">Ilustrativo: sin backend</Badge>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h1 className="text-2xl font-bold text-navy">Cuenta de servicio</h1><p className="mt-1 text-sm text-slate-500">Panel de administración en preparación. El backend todavía no está desplegado.</p></div>
+        <Badge tone="amber">En desarrollo</Badge>
       </div>
-      <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Todo lo que ves aquí es de ejemplo. La cuenta de servicio todavía no tiene backend: no se crean espacios, usuarios ni claves reales, y los botones se activarán cuando exista la conexión.</p>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {SERVICE_STATS.map(([k, v]) => <Card key={k}><p className="text-xs text-slate-500">{k}</p><p className="text-2xl font-bold text-navy">{v}</p></Card>)}
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
+      {newSecret && <Card title="Nueva clave API — guardala ahora">
+        <p className="mb-2 text-sm text-amber-800">Esta es la única vez que se mostrará. No la compartas ni la publiques en código de navegador.</p>
+        <code className="block break-all rounded bg-slate-100 p-3 text-sm">{newSecret}</code>
+        <div className="mt-3 flex gap-2"><Button onClick={copySecret}>Copiar clave</Button><Button variant="ghost" onClick={() => setNewSecret('')}>Ya la guardé</Button></div>
+      </Card>}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card><p className="text-xs text-slate-500">Aplicaciones</p><p className="text-2xl font-bold text-navy">{overview?.apps.length ?? '—'}</p></Card>
+        <Card><p className="text-xs text-slate-500">Claves API activas</p><p className="text-2xl font-bold text-navy">{overview?.keys.filter(k => k.status === 'active').length ?? '—'}</p></Card>
+        <Card><p className="text-xs text-slate-500">Almacenamiento compartido</p><p className="text-lg font-bold text-navy">{fmtSize(used)} / {fmtSize(quota)}</p><div className="mt-2 h-2 overflow-hidden rounded bg-slate-200"><div className="h-full bg-brand" style={{ width: pct + '%' }} /></div></Card>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {SERVICE_SECTIONS.map((s) => (
-          <Card key={s.title} title={s.title} action={<Pending>{s.action}</Pending>}>
-            <ul className="space-y-1 text-sm text-slate-600">{s.items.map((i) => <li key={i}>{i}</li>)}</ul>
-          </Card>
-        ))}
-        <Card title="Consumo y estadísticas">
-          <div className="space-y-3">{SERVICE_USAGE.map(([k, v]) => <div key={k}><p className="mb-1 text-xs text-slate-500">{k} · {v} %</p><Bar value={v} /></div>)}</div>
-        </Card>
-      </div>
-    </>
+      <Card title="Crear aplicación">
+        <form onSubmit={createApp} className="grid gap-2 sm:grid-cols-2">
+          <input className={inputCls} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la aplicación" maxLength={80} required />
+          <input className={inputCls} value={description} onChange={e => setDescription(e.target.value)} placeholder="Descripción (opcional)" maxLength={300} />
+          <div><Button type="submit" disabled={busy || !name.trim()}>Crear aplicación</Button></div>
+        </form>
+      </Card>
+      <Card title="Aplicaciones registradas" action={<Button variant="ghost" onClick={() => void load()} disabled={busy}>Actualizar</Button>}>
+        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p></div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción') }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
+      </Card>
+      {keyAppId && <Card title="Generar clave API">
+        <form onSubmit={createKey} className="flex flex-wrap gap-2">
+          <input className={inputCls + ' min-w-48 flex-1'} value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Nombre de la clave" maxLength={80} required />
+          <Button type="submit" disabled={busy || !keyName.trim()}>Generar</Button>
+          <Button type="button" variant="ghost" onClick={() => setKeyAppId('')}>Cancelar</Button>
+        </form>
+        <p className="mt-2 text-xs text-slate-500">Permisos iniciales: lectura y escritura de registros. La clave se muestra una sola vez.</p>
+      </Card>}
+      <Card title="Claves API">
+        {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}</li>)}</ul>}
+      </Card>
+      <p className="text-xs text-slate-500">La consola ya administra cuentas, aplicaciones y credenciales. La API pública para que otras aplicaciones lean y escriban datos se implementará y probará en la siguiente etapa.</p>
+    </div>
   )
 }

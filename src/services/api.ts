@@ -1,135 +1,287 @@
-// Capa de servicios. Hoy usa datos locales de demostración; mañana puede hablar con la API REST
-// (/v1) sin cambiar los componentes. IMPORTANTE: estas validaciones son de comodidad de interfaz.
-// En el backend real se repiten y son las únicas que cuentan.
+// Datos personales persistidos en Supabase. El almacenamiento local solo queda para el modo demo sin Supabase.
 import { localKV as kv } from './storage'
+import { supabase } from '../lib/supabase'
 import type { Activity, FileItem, Folder, Memory, MemoryInput, Mode, Session } from '../types'
 
 export const SOURCE_LABEL = 'Datos locales de demostración'
-export const QUOTA = 25 * 1024 * 1024
-export const MAX_FILE = 10 * 1024 * 1024
+export const QUOTA = 50 * 1024 * 1024
+export const MAX_FILE = 50 * 1024 * 1024
+export const STORAGE_BUCKET = 'memory-task-private'
 const BLOCKED = /\.(exe|dll|bat|cmd|ps1|msi|jar|apk|dmg|scr|com)$/i
 const K = { session: 'session', folders: 'folders', files: 'files', memories: 'memories', activity: 'activity' }
-
-const blobs = new Map<string, File>() // el contenido solo vive en memoria de esta sesión
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 const read = <T>(k: string, f: T) => kv.get<T>(k, f)
-// El registro de actividad es informativo: si falla no debe invalidar una operación ya guardada.
-const log = (text: string) => {
-  try {
-    kv.set(K.activity, [{ id: uid(), text, at: now() }, ...read<Activity[]>(K.activity, [])].slice(0, 20))
-  } catch { /* se ignora a propósito */ }
+const isCloud = Boolean(supabase)
+const demoBlobs = new Map<string, File>()
+
+async function currentUser() {
+  if (!supabase) throw new Error('Supabase no está configurado.')
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw error
+  if (!data.user) throw new Error('Tu sesión expiró. Volvé a iniciar sesión.')
+  return data.user
+}
+function fail(error: { message: string } | null) { if (error) throw new Error(error.message) }
+function folderFrom(row: any): Folder { return { id: row.id, name: row.name, parentId: row.parent_id ?? null } }
+function fileFrom(row: any): FileItem { return { id: row.id, name: row.name, size: Number(row.size_bytes), type: row.content_type, folderId: row.folder_id ?? null, addedAt: row.created_at } }
+function memoryFrom(row: any): Memory { return { id: row.id, title: row.title, body: row.body, category: row.category, tags: row.tags ?? [], createdAt: row.created_at, updatedAt: row.updated_at, versions: row.versions ?? [] } }
+async function cloudLog(description: string) {
+  if (!supabase) return
+  const user = await currentUser()
+  const { error } = await supabase.from('mt_activity').insert({ owner_id: user.id, description })
+  if (error) console.warn('No se pudo registrar actividad:', error.message)
+}
+function localLog(description: string) {
+  try { kv.set(K.activity, [{ id: uid(), text: description, at: now() }, ...read<Activity[]>(K.activity, [])].slice(0, 20)) } catch { /* registro informativo */ }
 }
 
 export const api = {
-  async session() { return read<Session | null>(K.session, null) },
+  async session() {
+    if (supabase) {
+      const { data, error } = await supabase.auth.getSession()
+      fail(error)
+      const user = data.session?.user
+      if (!user) return null
+      const metadata = user.user_metadata || {}
+      const mode = metadata.memory_task_mode === 'personal' || metadata.memory_task_mode === 'service' ? metadata.memory_task_mode : null
+      return { name: String(metadata.full_name || metadata.name || user.email || 'Usuario'), email: user.email || '', mode, demo: false } satisfies Session
+    }
+    return read<Session | null>(K.session, null)
+  },
+  async signInWithGoogle() {
+    if (!supabase) throw new Error('Supabase no está configurado.')
+    const redirectTo = new URL(window.location.pathname, window.location.origin).toString()
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
+    fail(error)
+  },
   async signInDemo() {
-    const prev = read<Session | null>(K.session, null)
-    if (prev) return prev
-    const s: Session = { name: 'Usuario Demo', email: 'demo@memorytask.local', mode: null, demo: true }
-    kv.set(K.session, s)
-    log('Sesión de demostración iniciada')
-    return s
+    if (supabase) throw new Error('El modo demostración está desactivado en este entorno.')
+    const previous = read<Session | null>(K.session, null)
+    if (previous) return previous
+    const session: Session = { name: 'Usuario Demo', email: 'demo@memorytask.local', mode: null, demo: true }
+    kv.set(K.session, session)
+    localLog('Sesión de demostración iniciada')
+    return session
   },
   async setMode(mode: Mode) {
-    const s = read<Session | null>(K.session, null)
-    if (!s) throw new Error('No hay sesión')
-    kv.set(K.session, { ...s, mode })
-    log(`Modalidad seleccionada: ${mode === 'personal' ? 'personal' : 'servicio'}`)
+    if (supabase) {
+      await currentUser()
+      const { error } = await supabase.auth.updateUser({ data: { memory_task_mode: mode } })
+      fail(error)
+      return
+    }
+    const session = read<Session | null>(K.session, null)
+    if (!session) throw new Error('No hay sesión')
+    kv.set(K.session, { ...session, mode })
+    localLog('Modalidad seleccionada: ' + mode)
   },
-  async signOut() { kv.remove(K.session) },
-  async resetDemo() { kv.clearAll(); blobs.clear() },
+  async signOut() {
+    if (supabase) { const { error } = await supabase.auth.signOut(); fail(error) }
+    kv.remove(K.session)
+  },
+  async resetDemo() {
+    if (supabase) throw new Error('No se pueden borrar datos de una cuenta conectada desde el reinicio local.')
+    kv.clearAll()
+    demoBlobs.clear()
+  },
 
-  async folders() { return read<Folder[]>(K.folders, []) },
+  async folders(): Promise<Folder[]> {
+    if (supabase) {
+      const user = await currentUser()
+      const { data, error } = await supabase.from('mt_folders').select('id,name,parent_id').eq('owner_id', user.id).order('name')
+      fail(error)
+      return (data ?? []).map(folderFrom)
+    }
+    return read<Folder[]>(K.folders, [])
+  },
   async createFolder(name: string, parentId: string | null) {
-    const n = name.trim()
-    if (!n || n.length > 60 || /[\\/]/.test(n)) throw new Error('Nombre inválido (máx. 60 caracteres, sin barras)')
-    const list = read<Folder[]>(K.folders, [])
-    if (parentId && !list.some((f) => f.id === parentId)) throw new Error('La carpeta superior no existe')
-    if (list.some((f) => f.parentId === parentId && f.name.toLowerCase() === n.toLowerCase()))
-      throw new Error('Ya existe una carpeta con ese nombre')
-    kv.set(K.folders, [...list, { id: uid(), name: n, parentId }])
-    log(`Carpeta creada: ${n}`)
+    const clean = name.trim()
+    if (!clean || clean.length > 60 || /[\\/]/.test(clean)) throw new Error('Nombre inválido (máx. 60 caracteres, sin barras)')
+    if (supabase) {
+      const user = await currentUser()
+      const siblingQuery = supabase.from('mt_folders').select('id,name').eq('owner_id', user.id)
+      const { data: siblings, error: lookupError } = parentId ? await siblingQuery.eq('parent_id', parentId) : await siblingQuery.is('parent_id', null)
+      fail(lookupError)
+      if ((siblings ?? []).some((item) => item.name.toLowerCase() === clean.toLowerCase())) throw new Error('Ya existe una carpeta con ese nombre')
+      const { error } = await supabase.from('mt_folders').insert({ owner_id: user.id, name: clean, parent_id: parentId })
+      fail(error)
+      await cloudLog('Carpeta creada: ' + clean)
+      return
+    }
+    const folders = read<Folder[]>(K.folders, [])
+    if (parentId && !folders.some((folder) => folder.id === parentId)) throw new Error('La carpeta superior no existe')
+    if (folders.some((folder) => folder.parentId === parentId && folder.name.toLowerCase() === clean.toLowerCase())) throw new Error('Ya existe una carpeta con ese nombre')
+    kv.set(K.folders, [...folders, { id: uid(), name: clean, parentId }])
+    localLog('Carpeta creada: ' + clean)
   },
 
-  async files() { return read<FileItem[]>(K.files, []) },
-  hasFile: (id: string) => blobs.has(id),
-  async getFile(id: string) { return blobs.get(id) },
-  async addFiles(list: File[], folderId: string | null) {
-    const files = read<FileItem[]>(K.files, [])
-    let used = files.reduce((a, f) => a + f.size, 0)
+  async files(): Promise<FileItem[]> {
+    if (supabase) {
+      const user = await currentUser()
+      const { data, error } = await supabase.from('mt_files').select('id,name,size_bytes,content_type,folder_id,created_at').eq('owner_id', user.id).order('created_at', { ascending: false })
+      fail(error)
+      return (data ?? []).map(fileFrom)
+    }
+    return read<FileItem[]>(K.files, [])
+  },
+  hasFile: (id: string) => Boolean(supabase) || demoBlobs.has(id),
+  async getFile(id: string): Promise<Blob | undefined> {
+    if (supabase) {
+      const user = await currentUser()
+      const { data: row, error: rowError } = await supabase.from('mt_files').select('storage_path').eq('id', id).eq('owner_id', user.id).maybeSingle()
+      fail(rowError)
+      if (!row) throw new Error('No se encontró el archivo.')
+      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(row.storage_path)
+      fail(error)
+      if (!data) throw new Error('El archivo está registrado, pero no se encontró su contenido en el almacenamiento.')
+      return data
+    }
+    return demoBlobs.get(id)
+  },
+  async addFiles(selected: File[], folderId: string | null): Promise<string[]> {
     const errors: string[] = []
-    const added: string[] = []
-    for (const f of list) {
-      if (BLOCKED.test(f.name)) errors.push(`${f.name}: tipo de archivo no permitido`)
-      else if (f.size > MAX_FILE) errors.push(`${f.name}: supera el máximo de 10 MB por archivo`)
-      else if (used + f.size > QUOTA) errors.push(`${f.name}: cuota de 25 MB agotada`)
-      else {
-        const item: FileItem = { id: uid(), name: f.name, size: f.size, type: f.type || 'application/octet-stream', folderId, addedAt: now() }
-        files.unshift(item)
-        blobs.set(item.id, f)
-        added.push(item.id)
-        used += f.size
+    if (supabase) {
+      const user = await currentUser()
+      const current = await api.usage()
+      let used = current.used
+      for (const file of selected) {
+        if (BLOCKED.test(file.name)) { errors.push(file.name + ': tipo de archivo no permitido'); continue }
+        if (file.size > MAX_FILE) { errors.push(file.name + ': supera el máximo de 50 MB por archivo'); continue }
+        if (used + file.size > QUOTA) { errors.push(file.name + ': cuota personal de 50 MB agotada'); continue }
+        const id = uid()
+        const safeName = file.name.normalize('NFKC').replace(/[^\w.\-() ]/g, '_').slice(0, 180) || 'archivo'
+        const storagePath = user.id + '/' + id + '/' + safeName
+        const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+        if (uploadError) { errors.push(file.name + ': ' + uploadError.message); continue }
+        const { error: insertError } = await supabase.from('mt_files').insert({ id, owner_id: user.id, folder_id: folderId, storage_path: storagePath, name: file.name, size_bytes: file.size, content_type: file.type || 'application/octet-stream' })
+        if (insertError) {
+          await supabase.storage.from(STORAGE_BUCKET).remove([storagePath])
+          errors.push(file.name + ': ' + insertError.message)
+          continue
+        }
+        used += file.size
+        await cloudLog('Archivo agregado: ' + file.name)
       }
+      return errors
     }
-    try {
-      kv.set(K.files, files)
-    } catch (e) {
-      added.forEach((id) => blobs.delete(id)) // no dejar contenido huérfano en memoria
-      throw e
+    const files = read<FileItem[]>(K.files, [])
+    let used = files.reduce((sum, item) => sum + item.size, 0)
+    const addedIds: string[] = []
+    for (const file of selected) {
+      if (BLOCKED.test(file.name)) errors.push(file.name + ': tipo de archivo no permitido')
+      else if (file.size > MAX_FILE) errors.push(file.name + ': supera el máximo de 50 MB por archivo')
+      else if (used + file.size > QUOTA) errors.push(file.name + ': cuota de 50 MB agotada')
+      else { const id = uid(); files.unshift({ id, name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); demoBlobs.set(id, file); addedIds.push(id); used += file.size }
     }
-    added.forEach((id) => log(`Archivo agregado: ${files.find((x) => x.id === id)?.name ?? ''}`))
+    try { kv.set(K.files, files) } catch (error) { addedIds.forEach((id) => demoBlobs.delete(id)); throw error }
     return errors
   },
   async moveFile(id: string, folderId: string | null) {
-    if (folderId && !read<Folder[]>(K.folders, []).some((f) => f.id === folderId)) throw new Error('La carpeta no existe')
-    kv.set(K.files, read<FileItem[]>(K.files, []).map((f) => (f.id === id ? { ...f, folderId } : f)))
+    if (supabase) {
+      const user = await currentUser()
+      const { error } = await supabase.from('mt_files').update({ folder_id: folderId }).eq('id', id).eq('owner_id', user.id)
+      fail(error)
+      return
+    }
+    if (folderId && !read<Folder[]>(K.folders, []).some((folder) => folder.id === folderId)) throw new Error('La carpeta no existe')
+    kv.set(K.files, read<FileItem[]>(K.files, []).map((file) => file.id === id ? { ...file, folderId } : file))
   },
   async removeFile(id: string) {
-    const files = read<FileItem[]>(K.files, [])
-    const f = files.find((x) => x.id === id)
-    kv.set(K.files, files.filter((x) => x.id !== id))
-    blobs.delete(id)
-    if (f) log(`Archivo eliminado: ${f.name}`)
+    if (supabase) {
+      const user = await currentUser()
+      const { data: row, error: lookupError } = await supabase.from('mt_files').select('storage_path,name').eq('id', id).eq('owner_id', user.id).maybeSingle()
+      fail(lookupError)
+      if (!row) throw new Error('No se encontró el archivo.')
+      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).remove([row.storage_path])
+      fail(storageError)
+      const { error: deleteError } = await supabase.from('mt_files').delete().eq('id', id).eq('owner_id', user.id)
+      fail(deleteError)
+      await cloudLog('Archivo eliminado: ' + row.name)
+      return
+    }
+    kv.set(K.files, read<FileItem[]>(K.files, []).filter((file) => file.id !== id))
+    demoBlobs.delete(id)
+    localLog('Archivo eliminado')
   },
 
-  async memories() { return read<Memory[]>(K.memories, []) },
-  async saveMemory(i: MemoryInput) {
-    const title = i.title.trim().slice(0, 120)
-    if (!title) throw new Error('El título es obligatorio')
-    const body = i.body.slice(0, 20000)
-    const tags = [...new Set(i.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 10)
-    const list = read<Memory[]>(K.memories, [])
-    const ex = list.find((m) => m.id === i.id)
-    if (ex) {
-      ex.versions = [{ title: ex.title, body: ex.body, at: ex.updatedAt }, ...ex.versions].slice(0, 50)
-      Object.assign(ex, { title, body, category: i.category, tags, updatedAt: now() })
-      log(`Recuerdo editado: ${title}`)
-    } else {
-      list.unshift({ id: uid(), title, body, category: i.category, tags, createdAt: now(), updatedAt: now(), versions: [] })
-      log(`Recuerdo creado: ${title}`)
+  async memories(): Promise<Memory[]> {
+    if (supabase) {
+      const user = await currentUser()
+      const { data, error } = await supabase.from('mt_memories').select('*').eq('owner_id', user.id).order('updated_at', { ascending: false })
+      fail(error)
+      return (data ?? []).map(memoryFrom)
     }
-    kv.set(K.memories, list)
+    return read<Memory[]>(K.memories, [])
+  },
+  async saveMemory(input: MemoryInput) {
+    const title = input.title.trim().slice(0, 120)
+    if (!title) throw new Error('El título es obligatorio')
+    const body = input.body.slice(0, 20000)
+    const tags = [...new Set(input.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 10)
+    if (supabase) {
+      const user = await currentUser()
+      if (input.id) {
+        const { data: previous, error: readError } = await supabase.from('mt_memories').select('title,body,updated_at,versions').eq('id', input.id).eq('owner_id', user.id).maybeSingle()
+        fail(readError)
+        if (!previous) throw new Error('No se encontró el recuerdo.')
+        const versions = [{ title: previous.title, body: previous.body, at: previous.updated_at }, ...(previous.versions ?? [])].slice(0, 50)
+        const { error } = await supabase.from('mt_memories').update({ title, body, category: input.category, tags, versions, updated_at: now() }).eq('id', input.id).eq('owner_id', user.id)
+        fail(error)
+      } else {
+        const { error } = await supabase.from('mt_memories').insert({ owner_id: user.id, title, body, category: input.category, tags })
+        fail(error)
+      }
+      await cloudLog((input.id ? 'Recuerdo editado: ' : 'Recuerdo creado: ') + title)
+      return
+    }
+    const memories = read<Memory[]>(K.memories, [])
+    const existing = memories.find((memory) => memory.id === input.id)
+    if (existing) {
+      existing.versions = [{ title: existing.title, body: existing.body, at: existing.updatedAt }, ...existing.versions].slice(0, 50)
+      Object.assign(existing, { title, body, category: input.category, tags, updatedAt: now() })
+    } else memories.unshift({ id: uid(), title, body, category: input.category, tags, createdAt: now(), updatedAt: now(), versions: [] })
+    kv.set(K.memories, memories)
+    localLog((input.id ? 'Recuerdo editado: ' : 'Recuerdo creado: ') + title)
   },
   async removeMemory(id: string) {
-    kv.set(K.memories, read<Memory[]>(K.memories, []).filter((m) => m.id !== id))
-    log('Recuerdo eliminado')
+    if (supabase) {
+      const user = await currentUser()
+      const { error } = await supabase.from('mt_memories').delete().eq('id', id).eq('owner_id', user.id)
+      fail(error)
+      await cloudLog('Recuerdo eliminado')
+      return
+    }
+    kv.set(K.memories, read<Memory[]>(K.memories, []).filter((memory) => memory.id !== id))
+    localLog('Recuerdo eliminado')
   },
 
   async usage() {
+    if (supabase) {
+      const user = await currentUser()
+      const [filesResult, foldersResult, memoriesResult] = await Promise.all([
+        supabase.from('mt_files').select('size_bytes').eq('owner_id', user.id),
+        supabase.from('mt_folders').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
+        supabase.from('mt_memories').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
+      ])
+      fail(filesResult.error); fail(foldersResult.error); fail(memoriesResult.error)
+      const files = filesResult.data ?? []
+      return { used: files.reduce((sum, file) => sum + Number(file.size_bytes), 0), quota: QUOTA, files: files.length, folders: foldersResult.count ?? 0, memories: memoriesResult.count ?? 0 }
+    }
     const files = read<FileItem[]>(K.files, [])
-    return {
-      used: files.reduce((a, f) => a + f.size, 0), quota: QUOTA, files: files.length,
-      folders: read<Folder[]>(K.folders, []).length, memories: read<Memory[]>(K.memories, []).length,
-    }
+    return { used: files.reduce((sum, file) => sum + file.size, 0), quota: QUOTA, files: files.length, folders: read<Folder[]>(K.folders, []).length, memories: read<Memory[]>(K.memories, []).length }
   },
-  async activity() { return read<Activity[]>(K.activity, []) },
-  async exportAll() {
-    return {
-      exportedAt: now(), source: 'demo-local',
-      nota: 'Los archivos se exportan solo como metadatos; su contenido no se almacena en modo demostración.',
-      folders: read<Folder[]>(K.folders, []), files: read<FileItem[]>(K.files, []),
-      memories: read<Memory[]>(K.memories, []),
+  async activity(): Promise<Activity[]> {
+    if (supabase) {
+      const user = await currentUser()
+      const { data, error } = await supabase.from('mt_activity').select('id,description,created_at').eq('owner_id', user.id).order('created_at', { ascending: false }).limit(20)
+      fail(error)
+      return (data ?? []).map((row) => ({ id: row.id, text: row.description, at: row.created_at }))
     }
+    return read<Activity[]>(K.activity, [])
+  },
+  async exportAll() {
+    const [folders, files, memories, activity] = await Promise.all([api.folders(), api.files(), api.memories(), api.activity()])
+    return { exportedAt: now(), source: isCloud ? 'supabase' : 'demo-local', folders, files, memories, activity, nota: isCloud ? 'Los archivos binarios se descargan individualmente desde la sección Archivos; esta exportación contiene sus metadatos.' : 'La exportación contiene los metadatos de tus datos locales; los archivos binarios no se incluyen.' }
   },
 }
