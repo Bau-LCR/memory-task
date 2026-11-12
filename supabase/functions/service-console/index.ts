@@ -82,6 +82,10 @@ Deno.serve(async (req) => {
         .select("id,app_id,name,key_prefix,scopes,status,last_used_at,expires_at,created_at")
         .eq("account_id", account.id).order("created_at", { ascending: false });
       if (keysError) throw keysError;
+      const { data: auditEntries, error: auditError } = await admin.from("mt_service_audit")
+        .select("id,action,details,created_at")
+        .eq("account_id", account.id).order("created_at", { ascending: false }).limit(50);
+      if (auditError) throw auditError;
 
       const objectRows = objects ?? [];
       const usedBytes = objectRows.reduce((sum, row) => sum + Number(row.size_bytes || 0), 0);
@@ -106,6 +110,7 @@ Deno.serve(async (req) => {
         account: { id: account.id, quotaBytes: Number(account.quota_bytes), usedBytes },
         apps: appStats,
         keys: keys ?? [],
+        audit: auditEntries ?? [],
       });
     }
 
