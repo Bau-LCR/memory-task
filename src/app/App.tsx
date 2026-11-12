@@ -51,6 +51,10 @@ function ConsentGate({ email, children }: { email: string; children: ReactElemen
     finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [email])
+  const decline = async () => {
+    if (supabase) await supabase.auth.signOut()
+    go('/login')
+  }
   const accept = async () => {
     if (!docs || !accepted || !supabase) return
     setBusy(true); setError('')
@@ -65,7 +69,7 @@ function ConsentGate({ email, children }: { email: string; children: ReactElemen
     finally { setBusy(false) }
   }
   if (loading) return <div className="grid min-h-screen place-items-center p-6 text-sm text-slate-500">Verificando términos y privacidad…</div>
-  if (error && !docs) return <div className="grid min-h-screen place-items-center bg-slate-50 p-5"><div className="w-full max-w-lg rounded-xl border bg-white p-6"><h1 className="text-xl font-bold text-navy">No se pudo verificar tu aceptación</h1><p className="mt-2 text-sm text-red-700">{error}</p><button className="mt-4 rounded-lg bg-brand px-4 py-2 text-sm text-white" onClick={() => void load()}>Reintentar</button></div></div>
+  if (error && !docs) return <div className="grid min-h-screen place-items-center bg-slate-50 p-5"><div className="w-full max-w-lg rounded-xl border bg-white p-6"><h1 className="text-xl font-bold text-navy">No se pudo verificar tu aceptación</h1><p className="mt-2 text-sm text-red-700">{error}</p><div className="mt-4 flex flex-wrap gap-2"><button className="rounded-lg bg-brand px-4 py-2 text-sm text-white" onClick={() => void load()}>Reintentar</button><button className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700" onClick={() => void decline()}>Cerrar sesión</button></div></div></div>
   if (!docs) return children
   return <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-100 p-4 sm:p-8">
     <div className="mx-auto max-w-3xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-8">
@@ -82,7 +86,7 @@ function ConsentGate({ email, children }: { email: string; children: ReactElemen
       </section>
       <label className="flex items-start gap-3 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={accepted} onChange={e => setAccepted(e.target.checked)} /><span>Leí y acepto los Términos de uso y el Aviso de privacidad de las versiones indicadas.</span></label>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      <button disabled={!accepted || busy} onClick={() => void accept()} className="rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Guardando…' : 'Aceptar y continuar'}</button>
+      <div className="flex flex-wrap gap-2"><button disabled={!accepted || busy} onClick={() => void accept()} className="rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Guardando…' : 'Aceptar y continuar'}</button><button disabled={busy} onClick={() => void decline()} className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700">No aceptar y cerrar sesión</button></div>
       <p className="text-xs text-slate-500">Si no aceptás, podés cerrar sesión. Cuando publiquemos una nueva versión, volveremos a solicitar la aceptación.</p>
     </div>
   </div>
