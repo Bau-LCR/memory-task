@@ -12,10 +12,21 @@ export function SettingsPage() {
     const saved = localStorage.getItem('mt_reduce_motion')
     return saved === null ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : saved === 'true'
   })
+  const [largeText, setLargeText] = useState(() => localStorage.getItem('mt_large_text') === 'true')
+  const [compact, setCompact] = useState(() => localStorage.getItem('mt_compact_layout') === 'true')
+  const [highContrast, setHighContrast] = useState(() => localStorage.getItem('mt_high_contrast') === 'true')
   useEffect(() => {
     document.documentElement.classList.toggle('mt-reduced-motion', reduceMotion)
     localStorage.setItem('mt_reduce_motion', String(reduceMotion))
   }, [reduceMotion])
+  useEffect(() => {
+    document.documentElement.classList.toggle('mt-large-text', largeText)
+    document.documentElement.classList.toggle('mt-compact-layout', compact)
+    document.documentElement.classList.toggle('mt-high-contrast', highContrast)
+    localStorage.setItem('mt_large_text', String(largeText))
+    localStorage.setItem('mt_compact_layout', String(compact))
+    localStorage.setItem('mt_high_contrast', String(highContrast))
+  }, [largeText, compact, highContrast])
   const { data: u } = useAsync(() => api.usage())
   if (!session?.mode) return null
   const other: Mode = session.mode === 'personal' ? 'service' : 'personal'
@@ -40,7 +51,13 @@ export function SettingsPage() {
           {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente inicial de 50 MiB, compartida entre las aplicaciones. El bucket privado ya está creado; todavía falta implementar y probar las operaciones de archivos de la API de servicio.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
         </Card>
         <Card title="Preferencias">
-          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reduceMotion} onChange={e => setReduceMotion(e.target.checked)} /> Reducir animaciones</label><p className="mt-2 text-xs text-slate-500">Por defecto se respeta la preferencia del sistema. Podés cambiarla acá; la elección queda guardada en este navegador.</p>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reduceMotion} onChange={e => setReduceMotion(e.target.checked)} /> Reducir animaciones</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={largeText} onChange={e => setLargeText(e.target.checked)} /> Texto ligeramente más grande</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={compact} onChange={e => setCompact(e.target.checked)} /> Diseño compacto (menos espacios)</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={highContrast} onChange={e => setHighContrast(e.target.checked)} /> Mayor contraste de texto</label>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Las preferencias se guardan en este navegador y no modifican tus datos de cuenta. Reducir animaciones respeta inicialmente la preferencia del sistema.</p>
         </Card>
         <Card title="Seguridad">
           <p className="text-sm text-slate-600">La identidad se verifica con Google y las tablas personales aplican políticas RLS para aislar los datos por usuario. La seguridad debe seguir verificándose antes de almacenar información sensible.</p>
