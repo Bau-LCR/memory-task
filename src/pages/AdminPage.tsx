@@ -4,7 +4,8 @@ import { Badge, Button, Card, inputCls } from '../components/ui'
 import { fmtDate, fmtSize } from '../utils/format'
 
 type AdminUser = { id: string; email: string; name: string; created_at: string; last_sign_in_at: string | null; role: 'super_admin' | 'admin' | 'user' }
-type Overview = { total: number; users: AdminUser[] }
+type ServiceAccountAdmin = { id: string; owner_id: string; quota_bytes: number; created_at: string; appCount: number; objectCount: number; externalUserCount: number; usedBytes: number; categories: Record<string, { count: number; bytes: number }> }
+type Overview = { total: number; users: AdminUser[]; serviceAccounts: ServiceAccountAdmin[] }
 type Details = {
   user: Pick<AdminUser, 'id' | 'email' | 'name' | 'created_at' | 'last_sign_in_at'>
   usage: { usedBytes: number; quotaBytes: number }
@@ -26,6 +27,8 @@ async function adminCall<T>(body: Record<string, unknown>): Promise<T> {
 export function AdminPage() {
   const [role, setRole] = useState<string>('checking')
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [serviceAccounts, setServiceAccounts] = useState<ServiceAccountAdmin[]>([])
+  const [serviceQuotaInputs, setServiceQuotaInputs] = useState<Record<string, string>>({})
   const [total, setTotal] = useState(0)
   const [selected, setSelected] = useState<Details | null>(null)
   const [audit, setAudit] = useState<AuditEntry[]>([])
@@ -46,7 +49,7 @@ export function AdminPage() {
       setRole(access.role)
       if (access.role !== 'admin' && access.role !== 'super_admin') return
       const result = await adminCall<Overview>({ action: 'overview' })
-      setUsers(result.users); setTotal(result.total)
+      setUsers(result.users); setTotal(result.total); setServiceAccounts(result.serviceAccounts ?? []); setServiceQuotaInputs(Object.fromEntries((result.serviceAccounts ?? []).map(a => [a.id, String(Math.round(a.quota_bytes / 1048576))])))
     } catch (e) { setError((e as Error).message) }
     finally { setBusy(false) }
   }, [])
@@ -125,6 +128,19 @@ export function AdminPage() {
     finally { setBusy(false) }
   }
 
+  const setServiceQuota = async (account: ServiceAccountAdmin) => {
+    const mb = Number(serviceQuotaInputs[account.id] ?? '50')
+    if (!Number.isInteger(mb) || mb < 50 || mb > 5120) { setError('La cuota de servicio debe estar entre 50 y 5120 MiB.'); return }
+    if (!confirm(`¿Asignar ${mb} MiB a la cuenta de servicio ${account.id}?`)) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await adminCall({ action: 'set_service_quota', accountId: account.id, quotaBytes: mb * 1048576 })
+      setNotice('Cuota de servicio actualizada.')
+      await load()
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
   const publishLegalDocument = async () => {
     if (!confirm(`¿Publicar ${legalType === 'terms' ? 'los términos' : 'el aviso de privacidad'} versión ${legalVersion}? Los usuarios deberán aceptar la nueva versión al volver a ingresar.`)) return
     setBusy(true); setError(''); setNotice('')
@@ -158,6 +174,7 @@ export function AdminPage() {
         <Card><p className="text-xs text-slate-500">Usuarios registrados</p><p className="text-2xl font-bold text-navy">{total}</p></Card>
         <Card><p className="text-xs text-slate-500">Administradores</p><p className="text-2xl font-bold text-navy">{users.filter(u => u.role === 'admin' || u.role === 'super_admin').length}</p></Card>
         <Card><p className="text-xs text-slate-500">Tu nivel</p><p className="text-lg font-bold text-navy">{role === 'super_admin' ? 'Principal' : 'Administrador'}</p></Card>
+        <Card><p className="text-xs text-slate-500">Cuentas de servicio</p><p className="text-2xl font-bold text-navy">{serviceAccounts.length}</p></Card>
       </div>
       <Card title="Usuarios" action={<Button variant="ghost" onClick={() => void load()} disabled={busy}>Actualizar</Button>}>
         <input className={inputCls + ' mb-3'} value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por nombre, correo o ID…" />
@@ -172,6 +189,16 @@ export function AdminPage() {
               : <Button onClick={() => void changeRole(user, 'admin')} disabled={busy}>Promover</Button>)}
           </li>
         ))}</ul>}
+      </Card>
+      <Card title="Cuentas de servicio">
+        {serviceAccounts.length ? <ul className="divide-y divide-slate-100">{serviceAccounts.map(account => <li key={account.id} className="py-3">
+          <p className="break-all text-xs text-slate-500">{account.id} · Propietario: {account.owner_id}</p>
+          <p className="mt-1 text-sm font-medium text-navy">{account.appCount} aplicaciones · {account.objectCount} objetos · {account.externalUserCount} usuarios externos</p>
+          <p className="text-sm text-slate-600">{fmtSize(account.usedBytes)} de {fmtSize(Number(account.quota_bytes))}</p>
+          {Object.entries(account.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(account.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}
+          {role === 'super_admin' && <div className="mt-2 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-600">Cuota MiB<input className={inputCls + ' mt-1 w-28'} type="number" min="50" max="5120" value={serviceQuotaInputs[account.id] ?? '50'} onChange={e => setServiceQuotaInputs(prev => ({ ...prev, [account.id]: e.target.value }))} /></label><Button disabled={busy} onClick={() => void setServiceQuota(account)}>Guardar cuota</Button></div>}
+        </li>)}</ul> : <p className="text-sm text-slate-500">Todavía no hay cuentas de servicio.</p>}
+        <p className="mt-2 text-xs text-slate-500">Las cuotas son límites lógicos y no aumentan el almacenamiento físico disponible en Supabase.</p>
       </Card>
       {selected && <Card title={`Datos de ${selected.user.name}`} action={<Button variant="ghost" onClick={() => setSelected(null)}>Cerrar</Button>}>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
