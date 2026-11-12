@@ -33,6 +33,7 @@ export function AdminPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [quotaInput, setQuotaInput] = useState('50')
 
   const load = useCallback(async () => {
     setBusy(true); setError('')
@@ -58,6 +59,7 @@ export function AdminPage() {
     try {
       const data = await adminCall<Details>({ action: 'user_details', userId: id })
       setSelected(data)
+      setQuotaInput(String(Math.round(data.usage.quotaBytes / 1048576)))
     } catch (e) { setError((e as Error).message) }
     finally { setBusy(false) }
   }
@@ -87,6 +89,36 @@ export function AdminPage() {
       popup.close()
       setError((e as Error).message)
     } finally { setBusy(false) }
+  }
+
+  const setQuota = async () => {
+    if (!selected) return
+    const mb = Number(quotaInput)
+    if (!Number.isInteger(mb) || mb < 50 || mb > 5120) { setError('Ingresá una cuota entre 50 y 5120 MiB.'); return }
+    if (!confirm(`¿Asignar ${mb} MiB de almacenamiento personal a ${selected.user.email}?`)) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await adminCall({ action: 'set_personal_quota', userId: selected.user.id, quotaBytes: mb * 1048576 })
+      setNotice('Cuota personal actualizada.')
+      await openUser(selected.user.id)
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const deleteMemory = async (memoryId: string, title: string) => {
+    if (!selected || !confirm(`¿Eliminar definitivamente el recuerdo «${title}» de ${selected.user.email}?`)) return
+    setBusy(true); setError('')
+    try { await adminCall({ action: 'delete_user_memory', userId: selected.user.id, memoryId }); await openUser(selected.user.id); setNotice('Recuerdo eliminado y acción auditada.') }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const deleteUserFile = async (fileId: string, fileName: string) => {
+    if (!selected || !confirm(`¿Eliminar definitivamente el archivo «${fileName}» de ${selected.user.email}?`)) return
+    setBusy(true); setError('')
+    try { await adminCall({ action: 'delete_user_file', userId: selected.user.id, fileId }); await openUser(selected.user.id); setNotice('Archivo eliminado y acción auditada.') }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
   }
 
   const loadAudit = async () => {
@@ -132,9 +164,9 @@ export function AdminPage() {
           <p><strong>ID:</strong> <code className="break-all">{selected.user.id}</code></p>
           <p><strong>Último acceso:</strong> {selected.user.last_sign_in_at ? fmtDate(selected.user.last_sign_in_at) : 'Sin datos'}</p>
         </div>
-        <div className="mt-4 rounded-lg bg-slate-50 p-3"><p className="font-semibold">Almacenamiento personal</p><p className="text-sm">{fmtSize(selected.usage.usedBytes)} de {fmtSize(selected.usage.quotaBytes)}</p></div>
-        <div className="mt-4"><h3 className="font-semibold">Recuerdos ({selected.memories.length})</h3>{selected.memories.length ? <ul className="mt-2 space-y-2">{selected.memories.map(m => <li key={m.id} className="rounded-lg border border-slate-200 p-3"><p className="font-medium">{m.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{m.body}</p><p className="mt-1 text-xs text-slate-400">{m.category} · {fmtDate(m.updated_at)}</p></li>)}</ul> : <p className="text-sm text-slate-500">No hay recuerdos.</p>}</div>
-        <div className="mt-4"><h3 className="font-semibold">Archivos ({selected.files.length})</h3>{selected.files.length ? <ul className="mt-2 divide-y divide-slate-100">{selected.files.map(f => <li key={f.id} className="flex justify-between gap-2 py-2 text-sm"><span className="min-w-0 truncate">{f.name}</span><span className="shrink-0 text-slate-500">{fmtSize(Number(f.size_bytes))}</span><Button variant="ghost" onClick={() => void openPrivateFile(f.id, selected.user.id)} disabled={busy}>Abrir archivo</Button></li>)}</ul> : <p className="text-sm text-slate-500">No hay archivos.</p>}</div>
+        <div className="mt-4 rounded-lg bg-slate-50 p-3"><p className="font-semibold">Almacenamiento personal</p><p className="text-sm">{fmtSize(selected.usage.usedBytes)} de {fmtSize(selected.usage.quotaBytes)}</p>{role === 'super_admin' && <div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-600">Cuota en MiB<input className={inputCls + ' mt-1 w-32'} type="number" min="50" max="5120" step="1" value={quotaInput} onChange={e => setQuotaInput(e.target.value)} /></label><Button onClick={() => void setQuota()} disabled={busy}>Guardar cuota</Button></div>}<p className="mt-2 text-xs text-slate-500">La cuota es un límite lógico; no amplía el almacenamiento físico contratado por el proyecto.</p></div>
+        <div className="mt-4"><h3 className="font-semibold">Recuerdos ({selected.memories.length})</h3>{selected.memories.length ? <ul className="mt-2 space-y-2">{selected.memories.map(m => <li key={m.id} className="rounded-lg border border-slate-200 p-3"><p className="font-medium">{m.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{m.body}</p><p className="mt-1 text-xs text-slate-400">{m.category} · {fmtDate(m.updated_at)}</p><Button variant="danger" className="mt-2" disabled={busy} onClick={() => void deleteMemory(m.id, m.title)}>Eliminar recuerdo</Button></li>)}</ul> : <p className="text-sm text-slate-500">No hay recuerdos.</p>}</div>
+        <div className="mt-4"><h3 className="font-semibold">Archivos ({selected.files.length})</h3>{selected.files.length ? <ul className="mt-2 divide-y divide-slate-100">{selected.files.map(f => <li key={f.id} className="flex justify-between gap-2 py-2 text-sm"><span className="min-w-0 truncate">{f.name}</span><span className="shrink-0 text-slate-500">{fmtSize(Number(f.size_bytes))}</span><Button variant="ghost" onClick={() => void openPrivateFile(f.id, selected.user.id)} disabled={busy}>Abrir archivo</Button><Button variant="danger" onClick={() => void deleteUserFile(f.id, f.name)} disabled={busy}>Eliminar</Button></li>)}</ul> : <p className="text-sm text-slate-500">No hay archivos.</p>}</div>
         <div className="mt-4"><h3 className="font-semibold">Carpetas ({selected.folders.length})</h3><p className="text-sm text-slate-600">{selected.folders.map(f => f.name).join(' · ') || 'Sin carpetas'}</p></div>
         <div className="mt-4"><h3 className="font-semibold">Actividad reciente</h3><ul className="mt-2 space-y-1 text-sm text-slate-600">{selected.activity.map(a => <li key={a.id}>{a.description} · {fmtDate(a.created_at)}</li>)}</ul></div>
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Esta consulta administrativa queda registrada en el historial de auditoría. Los archivos se muestran como metadatos; su contenido binario no se descarga desde esta vista.</p>
