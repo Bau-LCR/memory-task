@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
       const appId = typeof body.appId === "string" ? body.appId : "";
       const name = typeof body.name === "string" ? body.name.trim() : "";
       const scopes = Array.isArray(body.scopes) ? body.scopes : [];
-      const allowedScopes = ["records:read", "records:write"];
+      const allowedScopes = ["records:read", "records:write", "files:read", "files:write"];
       if (!appId || !name || name.length > 80 || scopes.length < 1 ||
           scopes.some((scope: unknown) => !allowedScopes.includes(String(scope)))) {
         return json({ error: "Aplicación, nombre y permisos válidos son obligatorios." }, 400);
