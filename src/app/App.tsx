@@ -12,6 +12,7 @@ import { FilesPage } from '../pages/FilesPage'
 import { MemoriesPage } from '../pages/MemoriesPage'
 import { ServicesPage } from '../pages/ServicesPage'
 import { SettingsPage } from '../pages/SettingsPage'
+import { AdminPage } from '../pages/AdminPage'
 
 function useHash() {
   const read = () => window.location.hash.slice(1) || '/'
@@ -59,8 +60,8 @@ export default function App() {
     const home = session.mode === 'personal' ? '/panel' : '/servicio'
     const pages: Record<string, ReactElement> =
       session.mode === 'personal'
-        ? { '/panel': <DashboardPage />, '/archivos': <FilesPage />, '/recuerdos': <MemoriesPage />, '/ajustes': <SettingsPage /> }
-        : { '/servicio': <ServicesPage />, '/ajustes': <SettingsPage /> }
+        ? { '/panel': <DashboardPage />, '/archivos': <FilesPage />, '/recuerdos': <MemoriesPage />, '/ajustes': <SettingsPage />, '/admin': <AdminPage /> }
+        : { '/servicio': <ServicesPage />, '/ajustes': <SettingsPage />, '/admin': <AdminPage /> }
     view = pages[path] ? <Shell path={path}>{pages[path]}</Shell> : <Redirect to={home} />
   }
   return <SessionCtx.Provider value={{ session, refresh }}>{view}</SessionCtx.Provider>
