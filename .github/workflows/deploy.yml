@@ -4,7 +4,7 @@ name: Deploy to GitHub Pages
 # Requisito (una sola vez, lo hace el propietario): Settings > Pages > Build and deployment > Source: "GitHub Actions".
 on:
   push:
-    branches: [main]
+    branches: [feature/supabase-private-storage]
   workflow_dispatch:
 
 permissions:
