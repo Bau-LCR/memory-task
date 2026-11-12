@@ -76,9 +76,37 @@ Deno.serve(async (req) => {
         details: { user_count: users.length },
       });
       if (directoryAuditError) throw directoryAuditError;
+      const [serviceAccountsResult, serviceAppsResult, serviceObjectsResult] = await Promise.all([
+        admin.from("mt_service_accounts").select("id,owner_id,quota_bytes,created_at"),
+        admin.from("mt_service_apps").select("id,account_id,name,status"),
+        admin.from("mt_service_objects").select("account_id,app_id,external_user_id,object_category,size_bytes"),
+      ]);
+      for (const result of [serviceAccountsResult, serviceAppsResult, serviceObjectsResult]) {
+        if (result.error) throw result.error;
+      }
+      const serviceAccounts = (serviceAccountsResult.data ?? []).map((account) => {
+        const objects = (serviceObjectsResult.data ?? []).filter((row) => row.account_id === account.id);
+        const apps = (serviceAppsResult.data ?? []).filter((app) => app.account_id === account.id);
+        const categories: Record<string, { count: number; bytes: number }> = {};
+        for (const object of objects) {
+          const category = object.object_category || "custom";
+          categories[category] ??= { count: 0, bytes: 0 };
+          categories[category].count += 1;
+          categories[category].bytes += Number(object.size_bytes || 0);
+        }
+        return {
+          ...account,
+          appCount: apps.length,
+          objectCount: objects.length,
+          externalUserCount: new Set(objects.map((row) => row.external_user_id)).size,
+          usedBytes: objects.reduce((sum, row) => sum + Number(row.size_bytes || 0), 0),
+          categories,
+        };
+      });
       const roleMap = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
       return json({
         total: users.length,
+        serviceAccounts,
         users: users.map((user) => ({
           id: user.id,
           email: user.email ?? "",
@@ -217,6 +245,29 @@ Deno.serve(async (req) => {
       });
       if (auditError) throw auditError;
       return json({ success: true, documentType, version });
+    }
+
+    if (action === "set_service_quota") {
+      if (actorRole !== "super_admin") return json({ error: "Solo el administrador principal puede modificar cuotas de servicio de otras cuentas." }, 403);
+      const accountId = typeof body.accountId === "string" ? body.accountId : "";
+      const quotaBytes = Number(body.quotaBytes);
+      if (!accountId || !Number.isSafeInteger(quotaBytes) || quotaBytes < 52428800 || quotaBytes > 5368709120) {
+        return json({ error: "La cuota debe estar entre 50 MiB y 5 GiB." }, 400);
+      }
+      const { data: usedRows, error: usedError } = await admin.from("mt_service_objects")
+        .select("size_bytes").eq("account_id", accountId);
+      if (usedError) throw usedError;
+      const usedBytes = (usedRows ?? []).reduce((sum, row) => sum + Number(row.size_bytes || 0), 0);
+      if (quotaBytes < usedBytes) return json({ error: "La cuota no puede ser menor que el espacio que ya utiliza la cuenta." }, 409);
+      const { error: updateError } = await admin.from("mt_service_accounts")
+        .update({ quota_bytes: quotaBytes }).eq("id", accountId);
+      if (updateError) throw updateError;
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId, action: "service_quota_changed",
+        details: { service_account_id: accountId, quota_bytes: quotaBytes },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true, quotaBytes });
     }
 
     if (action === "set_personal_quota") {
