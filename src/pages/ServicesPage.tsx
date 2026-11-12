@@ -84,8 +84,8 @@ export function ServicesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-navy">Cuenta de servicio</h1><p className="mt-1 text-sm text-slate-500">Administración de aplicaciones y credenciales.</p></div>
-        <Badge tone="blue">Backend conectado</Badge>
+        <div><h1 className="text-2xl font-bold text-navy">Cuenta de servicio</h1><p className="mt-1 text-sm text-slate-500">Panel de administración en preparación. El backend todavía no está desplegado.</p></div>
+        <Badge tone="amber">En desarrollo</Badge>
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
