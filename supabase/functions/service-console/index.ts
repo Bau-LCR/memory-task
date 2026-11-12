@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     if (action === "overview") {
       const { data: apps, error: appsError } = await admin
         .from("mt_service_apps")
-        .select("id,name,description,status,created_at")
+        .select("id,name,description,status,identity_public_key,created_at")
         .eq("account_id", account.id).order("created_at", { ascending: false });
       if (appsError) throw appsError;
 
@@ -98,8 +98,10 @@ Deno.serve(async (req) => {
           categories[category].count += 1;
           categories[category].bytes += Number(row.size_bytes || 0);
         }
+        const { identity_public_key: publicKey, ...safeApp } = app;
         return {
-          ...app,
+          ...safeApp,
+          identityConfigured: Boolean(publicKey),
           objectCount: rows.length,
           externalUserCount: new Set(rows.map((row) => row.external_user_id)).size,
           usedBytes: rows.reduce((sum, row) => sum + Number(row.size_bytes || 0), 0),
@@ -146,6 +148,32 @@ Deno.serve(async (req) => {
         .select("id,name,description,status,created_at").single();
       if (error) throw error;
       return json({ app: data }, 201);
+    }
+
+    if (action === "set_identity_public_key") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      const publicKey = body.publicKey;
+      if (!appId || !publicKey || typeof publicKey !== "object" ||
+          publicKey.kty !== "EC" || publicKey.crv !== "P-256" ||
+          typeof publicKey.x !== "string" || typeof publicKey.y !== "string" ||
+          !/^[A-Za-z0-9_-]{43}$/.test(publicKey.x) ||
+          !/^[A-Za-z0-9_-]{43}$/.test(publicKey.y) || "d" in publicKey) {
+        return json({ error: "Enviá una clave pública JWK ECDSA P-256 válida. Nunca subas la clave privada." }, 400);
+      }
+      const { data: app, error: appError } = await admin.from("mt_service_apps")
+        .select("id").eq("id", appId).eq("account_id", account.id).maybeSingle();
+      if (appError) throw appError;
+      if (!app) return json({ error: "Aplicación no encontrada." }, 404);
+      const { error: updateError } = await admin.from("mt_service_apps")
+        .update({ identity_public_key: { kty: "EC", crv: "P-256", x: publicKey.x, y: publicKey.y, ext: true } })
+        .eq("id", appId).eq("account_id", account.id);
+      if (updateError) throw updateError;
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "identity_public_key_registered",
+        details: { app_id: appId },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true, appId });
     }
 
     if (action === "create_key") {
