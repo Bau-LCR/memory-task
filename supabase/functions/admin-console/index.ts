@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
       const version = typeof body.version === "string" ? body.version.trim() : "";
       const title = typeof body.title === "string" ? body.title.trim() : "";
       const content = typeof body.content === "string" ? body.content.trim() : "";
-      if (!["terms", "privacy"].includes(documentType) || !/^\\d+\\.\\d+(?:\\.\\d+)?$/.test(version) ||
+      if (!["terms", "privacy"].includes(documentType) || !/^\d+\.\d+(?:\.\d+)?$/.test(version) ||
           !title || title.length > 120 || content.length < 100 || content.length > 20000) {
         return json({ error: "Tipo, versión (por ejemplo 1.1), título y contenido válido son obligatorios." }, 400);
       }
