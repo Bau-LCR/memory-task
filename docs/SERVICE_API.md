@@ -2,7 +2,7 @@
 
 ## Estado
 
-La función está implementada en `supabase/functions/service-api/index.ts`. Para usarla, el propietario debe desplegarla en Supabase con el nombre `service-api` después de aplicar las migraciones correspondientes.
+La función está implementada en `supabase/functions/service-api/index.ts`. Para usarla, el propietario debe desplegarla en Supabase con el nombre `service-api` después de aplicar las migraciones correspondientes. En la configuración de esa función, desactivá **Verify JWT** en la puerta de enlace de Supabase: la función valida su propia clave `mt_live_...`. Esta excepción se aplica solo a `service-api`; las funciones administrativas deben conservar la verificación JWT.
 
 Endpoint:
 `https://<PROJECT_REF>.supabase.co/functions/v1/service-api`
