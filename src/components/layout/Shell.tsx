@@ -5,8 +5,8 @@ import { Button, DemoBadge, Badge, Logo, cx } from '../ui'
 import type { Mode } from '../../types'
 
 const NAV: Record<Mode, ReadonlyArray<readonly [string, string]>> = {
-  personal: [['/panel', 'Panel'], ['/archivos', 'Archivos'], ['/recuerdos', 'Recuerdos'], ['/ajustes', 'Ajustes']],
-  service: [['/servicio', 'Servicio'], ['/ajustes', 'Ajustes']],
+  personal: [['/panel', 'Panel'], ['/archivos', 'Archivos'], ['/recuerdos', 'Recuerdos'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
+  service: [['/servicio', 'Servicio'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
 }
 
 export function Shell({ path, children }: { path: string; children: ReactNode }) {
