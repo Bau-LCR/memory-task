@@ -39,11 +39,11 @@ grant all on public.mt_user_storage_quotas to service_role;
 
 create or replace function public.mt_personal_quota_for(p_user_id uuid)
 returns bigint
-language sql
+language plpgsql
 stable
 security definer
 set search_path = ''
-as $
+as $mt$
 begin
   if auth.uid() is not null and auth.uid() <> p_user_id then
     raise exception 'No autorizado para consultar la cuota de otro usuario.'
@@ -54,7 +54,7 @@ begin
     52428800::bigint
   );
 end;
-$;
+$mt$;
 revoke all on function public.mt_personal_quota_for(uuid) from public, anon, authenticated;
 grant execute on function public.mt_personal_quota_for(uuid) to authenticated, service_role;
 
