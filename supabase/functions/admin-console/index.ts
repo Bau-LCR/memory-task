@@ -58,11 +58,16 @@ Deno.serve(async (req) => {
     }
 
     if (action === "overview") {
-      const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({
-        page: 1, perPage: 1000,
-      });
-      if (usersError) throw usersError;
-      const users = usersData.users ?? [];
+      const users = [];
+      for (let page = 1; ; page++) {
+        const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({
+          page, perPage: 1000,
+        });
+        if (usersError) throw usersError;
+        const batch = usersData.users ?? [];
+        users.push(...batch);
+        if (batch.length < 1000) break;
+      }
       const { data: roles, error: rolesError } = await admin
         .from("mt_user_roles").select("user_id,role,created_at");
       if (rolesError) throw rolesError;
@@ -119,6 +124,26 @@ Deno.serve(async (req) => {
         folders: folders.data ?? [],
         activity: activity.data ?? [],
       });
+    }
+
+    if (action === "create_file_link") {
+      const fileId = typeof body.fileId === "string" ? body.fileId : "";
+      if (!fileId) return json({ error: "Falta el archivo seleccionado." }, 400);
+      const { data: file, error: fileError } = await admin.from("mt_files")
+        .select("id,name,storage_path").eq("id", fileId).maybeSingle();
+      if (fileError) throw fileError;
+      if (!file) return json({ error: "Archivo no encontrado." }, 404);
+      const { data: signed, error: signedError } = await admin.storage
+        .from("memory-task-private").createSignedUrl(file.storage_path, 60, { download: file.name });
+      if (signedError) throw signedError;
+      const { error: auditError } = await admin.from("mt_admin_audit").insert({
+        actor_id: actorId,
+        target_user_id: typeof body.userId === "string" ? body.userId : null,
+        action: "private_file_access_link_created",
+        details: { file_id: file.id, file_name: file.name, expires_in_seconds: 60 },
+      });
+      if (auditError) throw auditError;
+      return json({ signedUrl: signed.signedUrl, expiresInSeconds: 60 });
     }
 
     if (action === "set_role") {
