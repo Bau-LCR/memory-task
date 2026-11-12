@@ -91,6 +91,7 @@ export function ServicesPage() {
     setNotice('Clave copiada al portapapeles.')
   }
 
+  const apiEndpoint = import.meta.env.VITE_SUPABASE_URL ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/service-api` : 'Configurá VITE_SUPABASE_URL para ver el endpoint'
   const used = overview?.account.usedBytes ?? 0
   const quota = overview?.account.quotaBytes ?? 52428800
   const pct = quota ? Math.min(100, used / quota * 100) : 0
@@ -138,8 +139,9 @@ export function ServicesPage() {
         {overview?.audit?.length ? <ul className="divide-y divide-slate-100">{overview.audit.map(entry => <li key={entry.id} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replace(/_/g, ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)} · App: {String(entry.details.app_id ?? '—')} · Usuario externo: {String(entry.details.external_user_id ?? '—')}</p></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no hay actividad de API registrada.</p>}
       </Card>
       <Card title="API de registros">
-        <p className="text-sm text-slate-600">La función de API ya está preparada en el repositorio. Después de desplegarla, tus servidores podrán guardar, consultar, listar y eliminar registros JSON por usuario externo y categoría.</p>
-        <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios tendrán un endpoint independiente.</p>
+        <p className="text-sm text-slate-600">La función de API ya está preparada en el repositorio. Después de desplegarla, tus servidores podrán guardar, consultar, listar y eliminar registros JSON y archivos privados por usuario externo y categoría.</p>
+        <p className="mt-2 text-xs font-medium text-slate-500">Endpoint</p><code className="mt-1 block break-all rounded-lg bg-slate-100 p-3 text-xs">{apiEndpoint}</code>
+        <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios usan operaciones específicas de carga, listado, descarga y eliminación.</p>
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
       <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. La API contempla carga y descarga privadas de archivos; esas operaciones quedarán activas al desplegar la función service-api y probarla.</p>
