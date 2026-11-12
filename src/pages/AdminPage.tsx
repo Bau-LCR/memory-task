@@ -34,6 +34,10 @@ export function AdminPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [quotaInput, setQuotaInput] = useState('50')
+  const [legalType, setLegalType] = useState<'terms' | 'privacy'>('terms')
+  const [legalVersion, setLegalVersion] = useState('1.1')
+  const [legalTitle, setLegalTitle] = useState('')
+  const [legalContent, setLegalContent] = useState('')
 
   const load = useCallback(async () => {
     setBusy(true); setError('')
@@ -121,6 +125,17 @@ export function AdminPage() {
     finally { setBusy(false) }
   }
 
+  const publishLegalDocument = async () => {
+    if (!confirm(`¿Publicar ${legalType === 'terms' ? 'los términos' : 'el aviso de privacidad'} versión ${legalVersion}? Los usuarios deberán aceptar la nueva versión al volver a ingresar.`)) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await adminCall({ action: 'publish_legal_document', documentType: legalType, version: legalVersion, title: legalTitle, content: legalContent })
+      setNotice('Documento publicado. Se solicitará aceptación de la nueva versión a los usuarios.')
+      setLegalTitle(''); setLegalContent('')
+    } catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+
   const loadAudit = async () => {
     setBusy(true); setError('')
     try { const data = await adminCall<{ entries: AuditEntry[] }>({ action: 'audit_log' }); setAudit(data.entries) }
@@ -174,6 +189,16 @@ export function AdminPage() {
       <Card title="Auditoría" action={<Button variant="ghost" onClick={() => void loadAudit()} disabled={busy}>Consultar registro</Button>}>
         {audit.length ? <ul className="divide-y divide-slate-100">{audit.map(entry => <li key={entry.id} className="py-2 text-sm"><p className="font-medium">{entry.action}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)} · Actor: {entry.actor_id} · Usuario: {entry.target_user_id ?? '—'}</p></li>)}</ul> : <p className="text-sm text-slate-500">Consultá el registro para ver las últimas acciones administrativas.</p>}
       </Card>
+      {role === 'super_admin' && <Card title="Documentos legales y versiones">
+        <p className="mb-3 text-sm text-slate-600">Publicá una versión nueva de los términos o del aviso de privacidad. Al hacerlo, las cuentas deberán revisarla y aceptarla antes de continuar.</p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <select className={inputCls} value={legalType} onChange={e => setLegalType(e.target.value as 'terms' | 'privacy')}><option value="terms">Términos de uso</option><option value="privacy">Aviso de privacidad</option></select>
+          <input className={inputCls} value={legalVersion} onChange={e => setLegalVersion(e.target.value)} placeholder="Versión 1.1" />
+          <input className={inputCls} value={legalTitle} onChange={e => setLegalTitle(e.target.value)} maxLength={120} placeholder="Título del documento" />
+        </div>
+        <textarea className={inputCls + ' mt-2 min-h-40'} value={legalContent} onChange={e => setLegalContent(e.target.value)} maxLength={20000} placeholder="Contenido completo del documento (mínimo 100 caracteres)" />
+        <Button className="mt-2" disabled={busy || !legalTitle.trim() || legalContent.trim().length < 100} onClick={() => void publishLegalDocument()}>Publicar nueva versión</Button>
+      </Card>}
     </div>
   )
 }
