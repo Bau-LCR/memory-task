@@ -68,7 +68,7 @@ export function ServicesPage() {
     try {
       const result = await callService<{ secret: string }>({
         action: 'create_key', appId: keyAppId, name: keyName,
-        scopes: ['records:read', 'records:write'],
+        scopes: ['records:read', 'records:write', 'files:read', 'files:write'],
       })
       setNewSecret(result.secret)
       setKeyName(''); setKeyAppId('')
@@ -129,7 +129,7 @@ export function ServicesPage() {
           <Button type="submit" disabled={busy || !keyName.trim()}>Generar</Button>
           <Button type="button" variant="ghost" onClick={() => setKeyAppId('')}>Cancelar</Button>
         </form>
-        <p className="mt-2 text-xs text-slate-500">Permisos iniciales: lectura y escritura de registros. La clave se muestra una sola vez.</p>
+        <p className="mt-2 text-xs text-slate-500">Permisos iniciales: lectura y escritura de registros y archivos. La clave se muestra una sola vez.</p>
       </Card>}
       <Card title="Claves API">
         {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}</li>)}</ul>}
