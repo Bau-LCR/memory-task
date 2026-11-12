@@ -75,6 +75,20 @@ export function AdminPage() {
     finally { setBusy(false) }
   }
 
+  const openPrivateFile = async (fileId: string, userId: string) => {
+    const popup = window.open('about:blank', '_blank')
+    if (!popup) { setError('El navegador bloqueó la ventana. Permití ventanas emergentes para abrir el archivo.'); return }
+    popup.opener = null
+    setBusy(true); setError('')
+    try {
+      const result = await adminCall<{ signedUrl: string }>({ action: 'create_file_link', fileId, userId })
+      popup.location.href = result.signedUrl
+    } catch (e) {
+      popup.close()
+      setError((e as Error).message)
+    } finally { setBusy(false) }
+  }
+
   const loadAudit = async () => {
     setBusy(true); setError('')
     try { const data = await adminCall<{ entries: AuditEntry[] }>({ action: 'audit_log' }); setAudit(data.entries) }
@@ -120,7 +134,7 @@ export function AdminPage() {
         </div>
         <div className="mt-4 rounded-lg bg-slate-50 p-3"><p className="font-semibold">Almacenamiento personal</p><p className="text-sm">{fmtSize(selected.usage.usedBytes)} de {fmtSize(selected.usage.quotaBytes)}</p></div>
         <div className="mt-4"><h3 className="font-semibold">Recuerdos ({selected.memories.length})</h3>{selected.memories.length ? <ul className="mt-2 space-y-2">{selected.memories.map(m => <li key={m.id} className="rounded-lg border border-slate-200 p-3"><p className="font-medium">{m.title}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{m.body}</p><p className="mt-1 text-xs text-slate-400">{m.category} · {fmtDate(m.updated_at)}</p></li>)}</ul> : <p className="text-sm text-slate-500">No hay recuerdos.</p>}</div>
-        <div className="mt-4"><h3 className="font-semibold">Archivos ({selected.files.length})</h3>{selected.files.length ? <ul className="mt-2 divide-y divide-slate-100">{selected.files.map(f => <li key={f.id} className="flex justify-between gap-2 py-2 text-sm"><span className="min-w-0 truncate">{f.name}</span><span className="shrink-0 text-slate-500">{fmtSize(Number(f.size_bytes))}</span></li>)}</ul> : <p className="text-sm text-slate-500">No hay archivos.</p>}</div>
+        <div className="mt-4"><h3 className="font-semibold">Archivos ({selected.files.length})</h3>{selected.files.length ? <ul className="mt-2 divide-y divide-slate-100">{selected.files.map(f => <li key={f.id} className="flex justify-between gap-2 py-2 text-sm"><span className="min-w-0 truncate">{f.name}</span><span className="shrink-0 text-slate-500">{fmtSize(Number(f.size_bytes))}</span><Button variant="ghost" onClick={() => void openPrivateFile(f.id, selected.user.id)} disabled={busy}>Abrir archivo</Button></li>)}</ul> : <p className="text-sm text-slate-500">No hay archivos.</p>}</div>
         <div className="mt-4"><h3 className="font-semibold">Carpetas ({selected.folders.length})</h3><p className="text-sm text-slate-600">{selected.folders.map(f => f.name).join(' · ') || 'Sin carpetas'}</p></div>
         <div className="mt-4"><h3 className="font-semibold">Actividad reciente</h3><ul className="mt-2 space-y-1 text-sm text-slate-600">{selected.activity.map(a => <li key={a.id}>{a.description} · {fmtDate(a.created_at)}</li>)}</ul></div>
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Esta consulta administrativa queda registrada en el historial de auditoría. Los archivos se muestran como metadatos; su contenido binario no se descarga desde esta vista.</p>
