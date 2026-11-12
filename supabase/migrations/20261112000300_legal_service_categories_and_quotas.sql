@@ -160,6 +160,20 @@ before insert or update of account_id, size_bytes
 on public.mt_service_objects
 for each row execute function public.mt_enforce_service_storage_quota();
 
+create table if not exists public.mt_service_audit (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.mt_service_accounts(id) on delete cascade,
+  actor_id uuid references auth.users(id) on delete set null,
+  action text not null check (char_length(action) between 1 and 80),
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.mt_service_audit enable row level security;
+revoke all on public.mt_service_audit from anon, authenticated;
+grant all on public.mt_service_audit to service_role;
+create index if not exists mt_service_audit_account_created_idx
+  on public.mt_service_audit(account_id, created_at desc);
+
 create table if not exists public.mt_legal_documents (
   document_type text not null check (document_type in ('terms','privacy')),
   version text not null,
