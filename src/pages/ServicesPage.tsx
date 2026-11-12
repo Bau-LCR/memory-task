@@ -139,7 +139,7 @@ export function ServicesPage() {
         <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios tendrán un endpoint independiente.</p>
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
-      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El almacenamiento de archivos binarios de servicio todavía requiere su endpoint seguro de carga y descarga.</p>
+      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. La API contempla carga y descarga privadas de archivos; esas operaciones quedarán activas al desplegar la función service-api y probarla.</p>
     </div>
   )
 }
