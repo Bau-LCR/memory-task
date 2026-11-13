@@ -116,6 +116,63 @@ export const api = {
     localLog('Carpeta creada: ' + clean)
   },
 
+  async removeFolder(id: string) {
+    if (supabase) {
+      const user = await currentUser()
+      const { data: allFolders, error: folderError } = await supabase.from('mt_folders').select('id,parent_id,name').eq('owner_id', user.id)
+      fail(folderError)
+      const descendants = new Set<string>([id])
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const folder of allFolders ?? []) if (folder.parent_id && descendants.has(folder.parent_id) && !descendants.has(folder.id)) {
+          descendants.add(folder.id); changed = true
+        }
+      }
+      const selected = (allFolders ?? []).filter(folder => descendants.has(folder.id))
+      if (!selected.some(folder => folder.id === id)) throw new Error('No se encontró la carpeta.')
+      const { data: files, error: filesError } = await supabase.from('mt_files')
+        .select('id,storage_path').eq('owner_id', user.id).in('folder_id', [...descendants])
+      fail(filesError)
+      const paths = (files ?? []).map(file => file.storage_path)
+      for (let i = 0; i < paths.length; i += 100) {
+        const { error } = await supabase.storage.from(STORAGE_BUCKET).remove(paths.slice(i, i + 100))
+        fail(error)
+      }
+      if (files?.length) {
+        const { error } = await supabase.from('mt_files').delete().eq('owner_id', user.id).in('folder_id', [...descendants])
+        fail(error)
+      }
+      const depth = (folderId: string): number => {
+        let n = 0, current = selected.find(folder => folder.id === folderId)
+        while (current?.parent_id && descendants.has(current.parent_id)) {
+          n++; current = selected.find(folder => folder.id === current?.parent_id)
+        }
+        return n
+      }
+      for (const folder of [...selected].sort((a, b) => depth(b.id) - depth(a.id))) {
+        const { error } = await supabase.from('mt_folders').delete().eq('owner_id', user.id).eq('id', folder.id)
+        fail(error)
+      }
+      await cloudLog('Carpeta y contenido eliminados')
+      return
+    }
+    const folders = read<Folder[]>(K.folders, [])
+    const descendants = new Set<string>([id])
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const folder of folders) if (folder.parentId && descendants.has(folder.parentId) && !descendants.has(folder.id)) {
+        descendants.add(folder.id); changed = true
+      }
+    }
+    const removed = read<FileItem[]>(K.files, []).filter(file => file.folderId !== null && descendants.has(file.folderId))
+    kv.set(K.folders, folders.filter(folder => !descendants.has(folder.id)))
+    kv.set(K.files, read<FileItem[]>(K.files, []).filter(file => file.folderId === null || !descendants.has(file.folderId)))
+    removed.forEach(file => demoBlobs.delete(file.id))
+    localLog('Carpeta y contenido eliminados')
+  },
+
   async files(): Promise<FileItem[]> {
     if (supabase) {
       const user = await currentUser()
@@ -271,6 +328,13 @@ export const api = {
     }
     const files = read<FileItem[]>(K.files, [])
     return { used: files.reduce((sum, file) => sum + file.size, 0), quota: QUOTA, files: files.length, folders: read<Folder[]>(K.folders, []).length, memories: read<Memory[]>(K.memories, []).length }
+  },
+  async setPersonalQuota(quotaBytes: number) {
+    if (!supabase) throw new Error('La cuota personal solo está disponible con una cuenta conectada.')
+    if (!Number.isSafeInteger(quotaBytes) || quotaBytes < QUOTA || quotaBytes > 5 * 1024 * 1024 * 1024) throw new Error('La cuota debe estar entre 50 MiB y 5 GiB.')
+    const { data, error } = await supabase.rpc('mt_set_my_personal_quota', { p_quota_bytes: quotaBytes })
+    fail(error)
+    return Number(data)
   },
   async activity(): Promise<Activity[]> {
     if (supabase) {

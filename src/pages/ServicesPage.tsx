@@ -29,6 +29,9 @@ export function ServicesPage() {
   const [quotaInput, setQuotaInput] = useState('50')
   const [identityAppId, setIdentityAppId] = useState('')
   const [identityJwkText, setIdentityJwkText] = useState('')
+  const [explorer, setExplorer] = useState<any>(null)
+  const [selectedObject, setSelectedObject] = useState<any>(null)
+  const [objectJson, setObjectJson] = useState('')
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -102,6 +105,47 @@ export function ServicesPage() {
     finally { setBusy(false) }
   }
 
+  const openExplorer = async (appId: string) => {
+    setBusy(true); setError(''); setExplorer(null); setSelectedObject(null)
+    try { setExplorer(await callService<any>({ action: 'app_explorer', appId })) }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+  const deleteApp = async (app: ServiceApp) => {
+    if (!confirm('Eliminar definitivamente ' + app.name + ' y todos sus datos y claves?')) return
+    setBusy(true); setError('')
+    try { await callService({ action: 'delete_app', appId: app.id }); setNotice('Aplicación y datos eliminados.'); if (explorer?.app.id === app.id) setExplorer(null); await load() }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+  const deleteRevokedKey = async (keyId: string) => {
+    if (!confirm('Eliminar definitivamente esta clave revocada?')) return
+    setBusy(true); setError('')
+    try { await callService({ action: 'delete_revoked_key', keyId }); setNotice('Clave eliminada.'); await load() }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+  const saveObject = async () => {
+    if (!selectedObject) return
+    try {
+      const payload = JSON.parse(objectJson)
+      await callService({ action: 'update_record', objectId: selectedObject.id, payload })
+      setNotice('Registro actualizado.')
+      await openExplorer(explorer.app.id)
+    } catch (e) { setError('No se pudo guardar: ' + (e as Error).message) }
+  }
+  const removeObject = async (object: any) => {
+    if (!confirm('Eliminar el elemento ' + object.object_key + '?')) return
+    try { await callService({ action: 'delete_record', objectId: object.id }); setNotice('Elemento eliminado.'); await openExplorer(explorer.app.id) }
+    catch (e) { setError((e as Error).message) }
+  }
+  const previewServiceFile = async (object: any) => {
+    try {
+      const result = await callService<{ signedUrl: string }>({ action: 'service_file_link', objectId: object.id })
+      window.open(result.signedUrl, '_blank', 'noopener,noreferrer')
+    } catch (e) { setError((e as Error).message) }
+  }
+
   const copySecret = async () => {
     await navigator.clipboard.writeText(newSecret)
     setNotice('Clave copiada al portapapeles.')
@@ -138,7 +182,7 @@ export function ServicesPage() {
         </form>
       </Card>
       <Card title="Aplicaciones registradas" action={<Button variant="ghost" onClick={() => void load()} disabled={busy}>Actualizar</Button>}>
-        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Badge tone={app.identityConfigured ? 'blue' : 'amber'}>{app.identityConfigured ? 'Identidad configurada' : 'Falta identidad'}</Badge><Button variant="ghost" onClick={() => { setIdentityAppId(app.id); setIdentityJwkText('') }}>Configurar identidad</Button><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción'); setKeyScopes(['records:read', 'records:write']) }}>Generar clave</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
+        {busy && !overview ? <p className="text-sm text-slate-500">Cargando…</p> : overview?.apps.length ? <ul className="divide-y divide-slate-100">{overview.apps.map(app => <li key={app.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium text-navy">{app.name}</p><p className="text-xs text-slate-500">{app.description || 'Sin descripción'} · {app.id}</p><p className="mt-1 text-xs text-slate-600">{app.objectCount} registros · {app.externalUserCount} usuarios externos · {fmtSize(app.usedBytes)}</p>{Object.keys(app.categories || {}).length > 0 && <div className="mt-1 flex flex-wrap gap-2">{Object.entries(app.categories).map(([category, stat]) => <span key={category} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{category}: {stat.count} · {fmtSize(stat.bytes)}</span>)}</div>}</div><Badge tone={app.status === 'active' ? 'blue' : 'gray'}>{app.status}</Badge><Badge tone={app.identityConfigured ? 'blue' : 'amber'}>{app.identityConfigured ? 'Identidad configurada' : 'Falta identidad'}</Badge><Button variant="ghost" onClick={() => { setIdentityAppId(app.id); setIdentityJwkText('') }}>Configurar identidad</Button><Button variant="ghost" onClick={() => { setKeyAppId(app.id); setKeyName(app.name + ' — producción'); setKeyScopes(['records:read', 'records:write']) }}>Generar clave</Button><Button variant="ghost" onClick={() => void openExplorer(app.id)}>Explorar datos</Button><Button variant="danger" onClick={() => void deleteApp(app)} disabled={busy}>Eliminar app</Button></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no creaste aplicaciones.</p>}
       </Card>
       {identityAppId && <Card title="Configurar identidad de usuarios externos">
         <p className="text-sm text-slate-600">Pegá únicamente la clave pública JWK ECDSA P-256 de tu aplicación. La clave privada se queda en el servidor de tu aplicación y firma una identidad de corta duración para cada usuario autenticado.</p>
@@ -154,8 +198,15 @@ export function ServicesPage() {
         <div className="mt-3 flex flex-wrap gap-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('records:read')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'records:read'] : v.filter(x => x !== 'records:read'))} /> Leer registros</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('records:write')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'records:write'] : v.filter(x => x !== 'records:write'))} /> Escribir registros</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('files:read')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'files:read'] : v.filter(x => x !== 'files:read'))} /> Leer archivos</label><label className="flex items-center gap-2"><input type="checkbox" checked={keyScopes.includes('files:write')} onChange={e => setKeyScopes(v => e.target.checked ? [...v, 'files:write'] : v.filter(x => x !== 'files:write'))} /> Escribir archivos</label></div><p className="mt-2 text-xs text-slate-500">Elegí solo los permisos que necesita la integración. La clave se muestra una sola vez.</p>
       </Card>}
       <Card title="Claves API">
-        {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}</li>)}</ul>}
+        {!overview?.keys.length ? <p className="text-sm text-slate-500">Todavía no hay claves generadas.</p> : <ul className="divide-y divide-slate-100">{overview.keys.map(key => <li key={key.id} className="flex flex-wrap items-center gap-2 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{key.name}</p><p className="text-xs text-slate-500">{key.key_prefix}… · {key.scopes.join(', ')}</p></div><Badge tone={key.status === 'active' ? 'blue' : 'gray'}>{key.status === 'active' ? 'Activa' : 'Revocada'}</Badge>{key.status === 'active' && <Button variant="danger" onClick={() => void revokeKey(key.id)} disabled={busy}>Revocar</Button>}{key.status === 'revoked' && <Button variant="danger" onClick={() => void deleteRevokedKey(key.id)} disabled={busy}>Eliminar definitivamente</Button>}</li>)}</ul>}
       </Card>
+      {explorer && <Card title={'Explorador de datos · ' + explorer.app.name} action={<Button variant="ghost" onClick={() => setExplorer(null)}>Cerrar</Button>}>
+        <p className="mb-3 text-xs text-slate-500">Los usuarios se detectan a partir de los registros. Nombre y correo solo aparecen si la aplicación los guardó en un objeto de categoría user.</p>
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{explorer.users.map((user: any) => <div key={user.externalUserId} className="rounded-lg border p-3 text-sm"><p className="font-semibold">{user.name}</p><p className="break-all text-xs text-slate-500">{user.email || 'Sin correo'}</p><p className="break-all text-xs text-slate-500">ID: {user.externalUserId}</p><p className="mt-2 text-xs">{user.objects} objetos · {user.chats} chats · {user.files} archivos</p></div>)}</div>
+        <h3 className="mb-2 font-semibold">Registros y archivos</h3>
+        <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b"><th className="p-2">Usuario</th><th className="p-2">Categoría</th><th className="p-2">Clave</th><th className="p-2">Tipo</th><th className="p-2">Acciones</th></tr></thead><tbody>{explorer.objects.map((object: any) => <tr key={object.id} className="border-b"><td className="max-w-40 truncate p-2">{object.external_user_id}</td><td className="p-2">{object.object_category}</td><td className="max-w-40 truncate p-2">{object.object_key}</td><td className="p-2">{object.object_type}</td><td className="p-2"><div className="flex gap-1">{object.object_type === 'record' && <Button variant="ghost" onClick={() => { setSelectedObject(object); setObjectJson(JSON.stringify(object.payload ?? {}, null, 2)) }}>Ver / editar</Button>}{object.object_type === 'file' && <Button variant="ghost" onClick={() => void previewServiceFile(object)}>Previsualizar</Button>}<Button variant="danger" onClick={() => void removeObject(object)}>Eliminar</Button></div></td></tr>)}</tbody></table></div>
+        {selectedObject && <div className="mt-4 rounded-lg border p-3"><p className="mb-2 font-semibold">Editar registro: {selectedObject.object_key}</p><textarea className={inputCls + ' min-h-48 font-mono text-xs'} value={objectJson} onChange={e => setObjectJson(e.target.value)} /><div className="mt-2 flex gap-2"><Button onClick={() => void saveObject()}>Guardar cambios</Button><Button variant="ghost" onClick={() => setSelectedObject(null)}>Cancelar</Button></div></div>}
+      </Card>}
       <Card title="Actividad reciente de las aplicaciones">
         {overview?.audit?.length ? <ul className="divide-y divide-slate-100">{overview.audit.map(entry => <li key={entry.id} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replace(/_/g, ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)} · App: {String(entry.details.app_id ?? '—')} · Usuario externo: {String(entry.details.external_user_id ?? '—')}</p></li>)}</ul> : <p className="text-sm text-slate-500">Todavía no hay actividad de API registrada.</p>}
       </Card>

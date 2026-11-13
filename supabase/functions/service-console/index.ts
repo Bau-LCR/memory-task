@@ -219,6 +219,137 @@ Deno.serve(async (req) => {
       return json({ key: data });
     }
 
+
+    if (action === "app_explorer") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      if (!appId) return json({ error: "Falta la aplicación seleccionada." }, 400);
+      const { data: app, error: appError } = await admin.from("mt_service_apps")
+        .select("id,name,description,status").eq("id", appId).eq("account_id", account.id).maybeSingle();
+      if (appError) throw appError;
+      if (!app) return json({ error: "Aplicación no encontrada." }, 404);
+      const { data: rows, error: rowsError } = await admin.from("mt_service_objects")
+        .select("id,external_user_id,object_type,object_category,object_key,payload,size_bytes,content_type,created_at,updated_at,storage_path")
+        .eq("account_id", account.id).eq("app_id", appId).order("updated_at", { ascending: false }).limit(1000);
+      if (rowsError) throw rowsError;
+      const byUser = new Map<string, { externalUserId: string; email: string; name: string; objects: number; chats: number; files: number }>();
+      for (const row of rows ?? []) {
+        const user = byUser.get(row.external_user_id) ?? { externalUserId: row.external_user_id, email: "", name: row.external_user_id, objects: 0, chats: 0, files: 0 };
+        user.objects++;
+        if (row.object_category === "chat") user.chats++;
+        if (row.object_type === "file") user.files++;
+        if (row.object_category === "user" && row.payload && typeof row.payload === "object") {
+          user.email = typeof row.payload.email === "string" ? row.payload.email : user.email;
+          user.name = typeof row.payload.name === "string" ? row.payload.name : user.name;
+        }
+        byUser.set(row.external_user_id, user);
+      }
+      return json({ app, users: [...byUser.values()], objects: (rows ?? []).map(({ storage_path: _path, ...row }) => row) });
+    }
+
+    if (action === "update_record") {
+      const objectId = typeof body.objectId === "string" ? body.objectId : "";
+      const payload = body.payload;
+      if (!objectId || !payload || typeof payload !== "object" || Array.isArray(payload)) return json({ error: "Registro y objeto JSON válidos requeridos." }, 400);
+      const serialized = JSON.stringify(payload);
+      if (serialized.length > 262144) return json({ error: "El registro supera el máximo de 256 KiB." }, 413);
+      const { data: row, error: lookupError } = await admin.from("mt_service_objects")
+        .select("id,app_id,object_key,external_user_id,object_type").eq("id", objectId).eq("account_id", account.id).eq("object_type", "record").maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!row) return json({ error: "Registro no encontrado." }, 404);
+      const { error: updateError } = await admin.from("mt_service_objects")
+        .update({ payload, size_bytes: new TextEncoder().encode(serialized).byteLength, updated_at: new Date().toISOString() })
+        .eq("id", objectId).eq("account_id", account.id);
+      if (updateError) throw updateError;
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "service_record_updated",
+        details: { app_id: row.app_id, object_id: objectId, external_user_id: row.external_user_id, object_key: row.object_key },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true });
+    }
+
+    if (action === "delete_record") {
+      const objectId = typeof body.objectId === "string" ? body.objectId : "";
+      if (!objectId) return json({ error: "Falta el registro seleccionado." }, 400);
+      const { data: row, error: lookupError } = await admin.from("mt_service_objects")
+        .select("id,app_id,object_key,external_user_id,object_type,storage_path").eq("id", objectId).eq("account_id", account.id).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!row) return json({ error: "Registro no encontrado." }, 404);
+      if (row.object_type === "file" && row.storage_path) {
+        const { error: storageError } = await admin.storage.from("memory-task-service-private").remove([row.storage_path]);
+        if (storageError) throw storageError;
+      }
+      const { error: deleteError } = await admin.from("mt_service_objects").delete().eq("id", objectId).eq("account_id", account.id);
+      if (deleteError) throw deleteError;
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "service_object_deleted",
+        details: { app_id: row.app_id, object_id: objectId, external_user_id: row.external_user_id, object_key: row.object_key },
+      });
+      if (auditError) throw auditError;
+      return json({ success: true });
+    }
+
+    if (action === "service_file_link") {
+      const objectId = typeof body.objectId === "string" ? body.objectId : "";
+      const { data: row, error: lookupError } = await admin.from("mt_service_objects")
+        .select("id,app_id,external_user_id,object_key,storage_path,content_type").eq("id", objectId)
+        .eq("account_id", account.id).eq("object_type", "file").maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!row || !row.storage_path) return json({ error: "Archivo no encontrado." }, 404);
+      const { data: signed, error: signedError } = await admin.storage.from("memory-task-service-private")
+        .createSignedUrl(row.storage_path, 60);
+      if (signedError) throw signedError;
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "service_file_previewed",
+        details: { app_id: row.app_id, object_id: row.id, external_user_id: row.external_user_id },
+      });
+      if (auditError) throw auditError;
+      return json({ signedUrl: signed.signedUrl, contentType: row.content_type });
+    }
+
+    if (action === "delete_app") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      if (!appId) return json({ error: "Identificador de aplicación requerido." }, 400);
+      const { data: app, error: appError } = await admin.from("mt_service_apps")
+        .select("id,name").eq("id", appId).eq("account_id", account.id).maybeSingle();
+      if (appError) throw appError;
+      if (!app) return json({ error: "Aplicación no encontrada." }, 404);
+      const { data: fileRows, error: filesError } = await admin.from("mt_service_objects")
+        .select("storage_path").eq("account_id", account.id).eq("app_id", appId).eq("object_type", "file");
+      if (filesError) throw filesError;
+      const paths = (fileRows ?? []).map(row => row.storage_path).filter(Boolean);
+      for (let i = 0; i < paths.length; i += 100) {
+        const { error } = await admin.storage.from("memory-task-service-private").remove(paths.slice(i, i + 100));
+        if (error) throw error;
+      }
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "service_app_deleted",
+        details: { app_id: appId, app_name: app.name, removed_files: paths.length },
+      });
+      if (auditError) throw auditError;
+      const { error: deleteError } = await admin.from("mt_service_apps").delete().eq("id", appId).eq("account_id", account.id);
+      if (deleteError) throw deleteError;
+      return json({ success: true, removedFiles: paths.length });
+    }
+
+    if (action === "delete_revoked_key") {
+      const keyId = typeof body.keyId === "string" ? body.keyId : "";
+      if (!keyId) return json({ error: "Identificador de clave requerido." }, 400);
+      const { data: key, error: keyError } = await admin.from("mt_service_api_keys")
+        .select("id,name,status").eq("id", keyId).eq("account_id", account.id).maybeSingle();
+      if (keyError) throw keyError;
+      if (!key || key.status !== "revoked") return json({ error: "Solo se pueden eliminar claves ya revocadas." }, 409);
+      const { error: auditError } = await admin.from("mt_service_audit").insert({
+        account_id: account.id, actor_id: ownerId, action: "revoked_api_key_deleted",
+        details: { key_id: keyId, key_name: key.name },
+      });
+      if (auditError) throw auditError;
+      const { error: deleteError } = await admin.from("mt_service_api_keys").delete()
+        .eq("id", keyId).eq("account_id", account.id).eq("status", "revoked");
+      if (deleteError) throw deleteError;
+      return json({ success: true });
+    }
+
     return json({ error: "Acción desconocida." }, 400);
   } catch (error) {
     console.error("service-console:", error);

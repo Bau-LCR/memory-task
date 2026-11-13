@@ -179,11 +179,11 @@ describe('ajustes', () => {
     await heading(/Memoria y almacenamiento/)
     expect(Object.keys(localStorage).filter((k) => k.startsWith('mt:demo:'))).toHaveLength(0)
   })
-  it('la IA está desactivada y no se puede activar', async () => {
+  it('el asistente IA está disponible desde ajustes', async () => {
     const user = await loginAs('personal')
     await heading('Panel personal')
     await user.click(sidebarLink('Ajustes'))
     const card = (await screen.findByText('Inteligencia artificial')).closest('section')!
-    expect(isDisabled(within(card).getByRole('checkbox'))).toBe(true)
+    expect(within(card).getByRole('button', { name: 'Abrir asistente' })).toBeTruthy()
   })
 })
