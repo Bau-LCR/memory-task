@@ -66,7 +66,7 @@ export function FilesPage() {
             const compressed = new Uint8Array(buffer, dataStart, compressedSize)
             let raw: Uint8Array
             if (method === 0) raw = compressed
-            else if (method === 8) raw = new Uint8Array(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())
+            else if (method === 8) raw = new Uint8Array(await new Response(new Blob([compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) as ArrayBuffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())
             else throw new Error('Este tipo de compresión DOCX no es compatible con la vista previa.')
             xml = new TextDecoder().decode(raw); break
           }
