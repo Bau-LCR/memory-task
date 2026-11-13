@@ -4,6 +4,11 @@ vi.mock('../lib/supabase', () => ({ supabase: null }))
 import { api, MAX_FILE, QUOTA } from './api'
 
 const file = (name: string, bytes = 10, type = 'text/plain') => new File([new Uint8Array(bytes)], name, { type })
+const sizedFile = (name: string, size: number) => {
+  const result = new File([], name, { type: 'application/octet-stream' })
+  Object.defineProperty(result, 'size', { value: size })
+  return result
+}
 
 beforeEach(async () => { await api.resetDemo() })
 
@@ -71,12 +76,14 @@ describe('archivos', () => {
     expect(errs[0]).toContain('50 MB')
     expect(await api.files()).toHaveLength(0)
   })
-  it('respeta la cuota total de 50 MB', async () => {
-    expect(await api.addFiles([file('a.bin', 30 * 1024 * 1024)], null)).toEqual([])
-    const errs = await api.addFiles([file('b.bin', 21 * 1024 * 1024)], null)
+  it('respeta la cuota total de 500 MiB sin superar el límite individual', async () => {
+    expect(QUOTA).toBe(500 * 1024 * 1024)
+    const batch = Array.from({ length: 10 }, (_, i) => sizedFile(`parte-${i}.bin`, MAX_FILE))
+    expect(await api.addFiles(batch, null)).toEqual([])
+    const errs = await api.addFiles([sizedFile('extra.bin', 1024 * 1024)], null)
     expect(errs[0]).toContain('cuota')
     const u = await api.usage()
-    expect(u.used).toBe(30 * 1024 * 1024)
+    expect(u.used).toBe(QUOTA)
     expect(u.used).toBeLessThanOrEqual(QUOTA)
   })
   it('no permite mover a una carpeta inexistente', async () => {
