@@ -127,3 +127,14 @@ end;
 $$;
 revoke all on function public.mt_consume_ai_request(uuid, integer) from public, anon, authenticated;
 grant execute on function public.mt_consume_ai_request(uuid, integer) to service_role;
+
+-- Aplicar la cuota personal también al propio bucket, no solo al registro mt_files.
+-- Reemplaza la política permisiva anterior para impedir cargas directas que la omitan.
+drop policy if exists "mt_storage_insert_own" on storage.objects;
+create policy "mt_storage_insert_own" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'memory-task-private'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+    and public.mt_storage_object_within_personal_quota(name, metadata)
+  );
