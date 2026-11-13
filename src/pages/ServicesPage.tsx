@@ -10,8 +10,19 @@ type Overview = { account: { id: string; quotaBytes: number; usedBytes: number }
 async function callService<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error('Supabase no está configurado.')
   const { data, error } = await supabase.functions.invoke('service-console', { body })
-  if (error) throw new Error(error.message || 'No se pudo contactar con el backend.')
-  if (data?.error) throw new Error(data.error)
+  if (error) {
+    let detail = error.message || 'No se pudo contactar con el backend.'
+    const context = (error as { context?: unknown }).context
+    if (context instanceof Response) {
+      try {
+        const payload = await context.clone().json()
+        if (typeof payload?.detail === 'string' && payload.detail) detail += ' Detalle: ' + payload.detail
+        else if (typeof payload?.error === 'string' && payload.error) detail += ' Detalle: ' + payload.error
+      } catch { /* La respuesta no contenía JSON legible. */ }
+    }
+    throw new Error(detail)
+  }
+  if (data?.error) throw new Error(data.detail ? data.error + ' Detalle: ' + data.detail : data.error)
   return data as T
 }
 
