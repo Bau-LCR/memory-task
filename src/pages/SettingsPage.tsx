@@ -85,9 +85,8 @@ export function SettingsPage() {
           <Button variant="ghost" className="mt-3" onClick={signOut}>Cerrar sesión</Button>
         </Card>
         <Card title="Inteligencia artificial">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled /> Activar asistente de IA</label>
-          <p className="mt-2 text-xs text-slate-500">Desactivada: no hay proveedor configurado. Se habilitará con una interfaz de proveedores intercambiables y límites de uso.</p>
-          <div className="mt-2"><Pending>Configurar proveedor</Pending></div>
+          <p className="text-sm text-slate-600">Asistente privado con conversaciones guardadas en tu cuenta. El proveedor se configura de forma segura en el servidor y el uso tiene un límite diario.</p>
+          <Button className="mt-3" onClick={() => go('/asistente')}>Abrir asistente</Button>
         </Card>
         <Card title="Exportación y datos">
           <p className="text-sm text-slate-600">Exporta tus recuerdos y los metadatos de tus archivos en JSON.</p>
