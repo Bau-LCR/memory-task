@@ -90,7 +90,7 @@ export function FilesPage() {
   return (
     <>
       <h1 className="text-2xl font-bold text-navy">Archivos</h1>
-      <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Los archivos se guardan en tu espacio privado de la nube. Cuota personal: 50 MB en total. Máximo {fmtSize(MAX_FILE)} por archivo.</p>
+      <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Los archivos se guardan en tu espacio privado de la nube. Cuota personal: {fmtSize(500 * 1024 * 1024)} en total. Máximo {fmtSize(MAX_FILE)} por archivo. Se admiten videos, imágenes, PDF, documentos y otros formatos seguros.</p>
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <label className="cursor-pointer rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-600">
