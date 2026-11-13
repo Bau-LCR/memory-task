@@ -70,3 +70,35 @@ create policy mt_ai_messages_delete_own on public.mt_ai_messages
 revoke all on public.mt_ai_conversations, public.mt_ai_messages from anon;
 grant select, insert, update, delete on public.mt_ai_conversations to authenticated;
 grant select, insert, delete on public.mt_ai_messages to authenticated;
+
+-- Permite al usuario autenticado administrar su propia cuota personal.
+create or replace function public.mt_set_my_personal_quota(p_quota_bytes bigint)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_used bigint;
+begin
+  if v_user_id is null then
+    raise exception 'Se requiere una sesión autenticada.' using errcode = '28000';
+  end if;
+  if p_quota_bytes < 52428800 or p_quota_bytes > 5368709120 then
+    raise exception 'La cuota debe estar entre 50 MiB y 5 GiB.' using errcode = '22023';
+  end if;
+  select coalesce(sum(size_bytes), 0) into v_used
+    from public.mt_files where owner_id = v_user_id;
+  if p_quota_bytes < v_used then
+    raise exception 'La cuota no puede ser menor que el espacio utilizado.' using errcode = '22023';
+  end if;
+  insert into public.mt_user_storage_quotas(user_id, quota_bytes, updated_at)
+    values (v_user_id, p_quota_bytes, now())
+  on conflict (user_id) do update
+    set quota_bytes = excluded.quota_bytes, updated_at = now(), updated_by = null;
+  return p_quota_bytes;
+end;
+$$;
+revoke all on function public.mt_set_my_personal_quota(bigint) from public, anon;
+grant execute on function public.mt_set_my_personal_quota(bigint) to authenticated, service_role;
