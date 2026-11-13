@@ -1,0 +1,6 @@
+project_id = "evrbaaeccuwaxclnpknk"
+
+# The public service API authenticates mt_live_* keys itself.
+# Disable Supabase JWT gateway verification only for this function.
+[functions.service-api]
+verify_jwt = false

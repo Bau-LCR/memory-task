@@ -1,18 +1,51 @@
+import { useEffect, useState } from 'react'
 import { api } from '../services/api'
+import { supabase } from '../lib/supabase'
 import { useAsync } from '../hooks/useAsync'
 import { go, useSession } from '../app/session'
 import { Bar, Button, Card, Pending, inputCls } from '../components/ui'
-import { download, fmtSize } from '../utils/format'
+import { download, fmtDate, fmtSize } from '../utils/format'
 import type { Mode } from '../types'
 
 export function SettingsPage() {
   const { session, refresh } = useSession()
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    const saved = localStorage.getItem('mt_reduce_motion')
+    return saved === null ? (typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false) : saved === 'true'
+  })
+  const [largeText, setLargeText] = useState(() => localStorage.getItem('mt_large_text') === 'true')
+  const [compact, setCompact] = useState(() => localStorage.getItem('mt_compact_layout') === 'true')
+  const [highContrast, setHighContrast] = useState(() => localStorage.getItem('mt_high_contrast') === 'true')
+  const [adminAccess, setAdminAccess] = useState<Array<{ action: string; created_at: string; details: Record<string, unknown> }> | null>(null)
+  const [auditError, setAuditError] = useState('')
+  useEffect(() => {
+    document.documentElement.classList.toggle('mt-reduced-motion', reduceMotion)
+    localStorage.setItem('mt_reduce_motion', String(reduceMotion))
+  }, [reduceMotion])
+  useEffect(() => {
+    document.documentElement.classList.toggle('mt-large-text', largeText)
+    document.documentElement.classList.toggle('mt-compact-layout', compact)
+    document.documentElement.classList.toggle('mt-high-contrast', highContrast)
+    localStorage.setItem('mt_large_text', String(largeText))
+    localStorage.setItem('mt_compact_layout', String(compact))
+    localStorage.setItem('mt_high_contrast', String(highContrast))
+  }, [largeText, compact, highContrast])
   const { data: u } = useAsync(() => api.usage())
   if (!session?.mode) return null
   const other: Mode = session.mode === 'personal' ? 'service' : 'personal'
   const switchMode = async () => { await api.setMode(other); await refresh(); go(other === 'personal' ? '/panel' : '/servicio') }
   const exportData = async () => download(new Blob([JSON.stringify(await api.exportAll(), null, 2)], { type: 'application/json' }), 'memory-task-export.json')
   const reset = async () => { if (confirm('Esta acción solo reinicia datos locales de demostración. Los datos de la nube no se borrarán. ¿Continuar?')) { await api.resetDemo(); await refresh(); go('/') } }
+  const loadAdminAccess = async () => {
+    if (!supabase) return
+    setAuditError('')
+    try {
+      const { data, error } = await supabase.functions.invoke('account-consent', { body: { action: 'admin_access_log' } })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      setAdminAccess(data.entries ?? [])
+    } catch (e) { setAuditError((e as Error).message) }
+  }
   const signOut = async () => { await api.signOut(); await refresh(); go('/') }
   return (
     <>
@@ -28,13 +61,24 @@ export function SettingsPage() {
           <Button variant="ghost" className="mt-3" onClick={switchMode}>Cambiar a {other === 'personal' ? 'cuenta personal' : 'cuenta de servicio'}</Button>
         </Card>
         <Card title="Almacenamiento">
-          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente de 50 MB. El almacenamiento de servicio estará disponible cuando terminemos su backend.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
+          {session.mode === 'service' ? <p className="text-sm text-slate-600">Cuota independiente inicial de 50 MiB, compartida entre las aplicaciones. El bucket privado y las operaciones de carga, consulta y descarga ya están preparados en el código; falta desplegar la función y probarla en Supabase.</p> : u ? <><Bar value={(u.used / u.quota) * 100} /><p className="mt-2 text-sm">{fmtSize(u.used)} de {fmtSize(u.quota)} (cuota personal en la nube)</p></> : <p className="text-sm text-slate-500">Cargando…</p>}
         </Card>
         <Card title="Preferencias">
-          <p className="text-sm text-slate-600">Las animaciones respetan la preferencia del sistema (<code>prefers-reduced-motion</code>). No hay más preferencias por ahora.</p>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reduceMotion} onChange={e => setReduceMotion(e.target.checked)} /> Reducir animaciones</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={largeText} onChange={e => setLargeText(e.target.checked)} /> Texto ligeramente más grande</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={compact} onChange={e => setCompact(e.target.checked)} /> Diseño compacto (menos espacios)</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={highContrast} onChange={e => setHighContrast(e.target.checked)} /> Mayor contraste de texto</label>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Las preferencias se guardan en este navegador y no modifican tus datos de cuenta. Reducir animaciones respeta inicialmente la preferencia del sistema.</p>
         </Card>
         <Card title="Seguridad">
           <p className="text-sm text-slate-600">La identidad se verifica con Google y las tablas personales aplican políticas RLS para aislar los datos por usuario. La seguridad debe seguir verificándose antes de almacenar información sensible.</p>
+        </Card>
+        <Card title="Acceso administrativo a tus datos" action={<Button variant="ghost" onClick={() => void loadAdminAccess()}>Consultar</Button>}>
+          <p className="text-sm text-slate-600">Las consultas y modificaciones administrativas de tus recuerdos y archivos se registran. Podés revisar los accesos recientes.</p>
+          {auditError && <p role="alert" className="mt-2 text-xs text-red-700">{auditError}</p>}
+          {adminAccess && (adminAccess.length ? <ul className="mt-3 divide-y divide-slate-100">{adminAccess.map((entry, i) => <li key={i} className="py-2 text-sm"><p className="font-medium text-navy">{entry.action.replace(/_/g, ' ')}</p><p className="text-xs text-slate-500">{fmtDate(entry.created_at)}</p></li>)}</ul> : <p className="mt-2 text-xs text-slate-500">No hay accesos administrativos registrados para tu cuenta.</p>)}
         </Card>
         <Card title="Sesiones">
           <p className="text-sm text-slate-600">Sesión autenticada.</p>

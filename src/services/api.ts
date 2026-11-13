@@ -148,7 +148,7 @@ export const api = {
       for (const file of selected) {
         if (BLOCKED.test(file.name)) { errors.push(file.name + ': tipo de archivo no permitido'); continue }
         if (file.size > MAX_FILE) { errors.push(file.name + ': supera el máximo de 50 MB por archivo'); continue }
-        if (used + file.size > QUOTA) { errors.push(file.name + ': cuota personal de 50 MB agotada'); continue }
+        if (used + file.size > current.quota) { errors.push(file.name + ': supera la cuota de almacenamiento disponible en tu cuenta'); continue }
         const id = uid()
         const safeName = file.name.normalize('NFKC').replace(/[^\w.\-() ]/g, '_').slice(0, 180) || 'archivo'
         const storagePath = user.id + '/' + id + '/' + safeName
@@ -259,14 +259,15 @@ export const api = {
   async usage() {
     if (supabase) {
       const user = await currentUser()
-      const [filesResult, foldersResult, memoriesResult] = await Promise.all([
+      const [filesResult, foldersResult, memoriesResult, quotaResult] = await Promise.all([
         supabase.from('mt_files').select('size_bytes').eq('owner_id', user.id),
         supabase.from('mt_folders').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
         supabase.from('mt_memories').select('id', { count: 'exact', head: true }).eq('owner_id', user.id),
+        supabase.rpc('mt_personal_quota_for', { p_user_id: user.id }),
       ])
-      fail(filesResult.error); fail(foldersResult.error); fail(memoriesResult.error)
+      fail(filesResult.error); fail(foldersResult.error); fail(memoriesResult.error); fail(quotaResult.error)
       const files = filesResult.data ?? []
-      return { used: files.reduce((sum, file) => sum + Number(file.size_bytes), 0), quota: QUOTA, files: files.length, folders: foldersResult.count ?? 0, memories: memoriesResult.count ?? 0 }
+      return { used: files.reduce((sum, file) => sum + Number(file.size_bytes), 0), quota: Number(quotaResult.data ?? QUOTA), files: files.length, folders: foldersResult.count ?? 0, memories: memoriesResult.count ?? 0 }
     }
     const files = read<FileItem[]>(K.files, [])
     return { used: files.reduce((sum, file) => sum + file.size, 0), quota: QUOTA, files: files.length, folders: read<Folder[]>(K.folders, []).length, memories: read<Memory[]>(K.memories, []).length }
