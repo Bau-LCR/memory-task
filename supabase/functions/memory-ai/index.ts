@@ -68,7 +68,9 @@ Deno.serve(async (req) => {
     ]);
     if (insertError) throw insertError;
     await admin.from("mt_ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId).eq("owner_id", userId);
-    return json({ answer, remainingDailyRequests: Math.max(0, 19 - Number((await admin.from("mt_ai_usage").select("request_count").eq("user_id", userId).eq("usage_day", new Date().toISOString().slice(0, 10)).maybeSingle()).data?.request_count ?? 0)) });
+    const { data: usageRow } = await admin.from("mt_ai_usage").select("request_count")
+      .eq("user_id", userId).eq("usage_day", new Date().toISOString().slice(0, 10)).maybeSingle();
+    return json({ answer, remainingDailyRequests: Math.max(0, 20 - Number(usageRow?.request_count ?? 0)) });
   } catch (error) {
     console.error("memory-ai:", error);
     return json({ error: "No se pudo completar la solicitud al asistente." }, 500);
