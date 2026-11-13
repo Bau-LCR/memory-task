@@ -353,6 +353,10 @@ Deno.serve(async (req) => {
     return json({ error: "Acción desconocida." }, 400);
   } catch (error) {
     console.error("service-console:", error);
-    return json({ error: "No se pudo completar la operación de cuenta de servicio." }, 500);
+    const detail = error instanceof Error ? error.message : String(error);
+    return json({
+      error: "No se pudo completar la operación de cuenta de servicio.",
+      detail: detail.slice(0, 500),
+    }, 500);
   }
 });
