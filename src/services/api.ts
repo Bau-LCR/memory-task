@@ -5,6 +5,7 @@ import type { Activity, FileItem, Folder, Memory, MemoryInput, Mode, Session } f
 
 export const SOURCE_LABEL = 'Datos locales de demostración'
 export const QUOTA = 500 * 1024 * 1024
+const MIN_PERSONAL_QUOTA = 50 * 1024 * 1024
 // Supabase Free limita el tamaño individual a 50 MiB por objeto.
 export const MAX_FILE = 50 * 1024 * 1024
 export const STORAGE_BUCKET = 'memory-task-private'
@@ -332,7 +333,7 @@ export const api = {
   },
   async setPersonalQuota(quotaBytes: number) {
     if (!supabase) throw new Error('La cuota personal solo está disponible con una cuenta conectada.')
-    if (!Number.isSafeInteger(quotaBytes) || quotaBytes < QUOTA || quotaBytes > 5 * 1024 * 1024 * 1024) throw new Error('La cuota debe estar entre 50 MiB y 5 GiB.')
+    if (!Number.isSafeInteger(quotaBytes) || quotaBytes < MIN_PERSONAL_QUOTA || quotaBytes > 5 * 1024 * 1024 * 1024) throw new Error('La cuota debe estar entre 50 MiB y 5 GiB.')
     const { data, error } = await supabase.rpc('mt_set_my_personal_quota', { p_quota_bytes: quotaBytes })
     fail(error)
     return Number(data)
