@@ -24,7 +24,7 @@ export function LandingPage() {
         <section className="mx-auto grid max-w-6xl items-center gap-12 px-6 pb-20 pt-12 md:grid-cols-[1.05fr_.95fr] md:pt-20">
           <div>
             <p className="text-xs font-semibold tracking-[.25em] text-sky-300">TU INFORMACIÓN, TUS ESPACIOS, TU MEMORIA</p>
-            <h1 className="mt-5 max-w-2xl text-4xl font-bold leading-tight md:text-6xl">Una memoria digital para personas y aplicaciones.</h1>
+            <h1 className="mt-5 max-w-2xl text-4xl font-bold leading-tight md:text-6xl"><span className="sr-only">Memoria y almacenamiento. </span>Una memoria digital para personas y aplicaciones.</h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-slate-300">Memory Task reúne almacenamiento privado, organización de información e integración para aplicaciones en una plataforma clara y flexible.</p>
             <div className="mt-8 flex flex-wrap gap-3"><Button className="px-6 py-3" onClick={() => go('/login')}>Comenzar</Button><a href="#como-funciona" className="rounded-lg border border-white/20 px-5 py-3 text-sm font-medium text-white hover:bg-white/10">Conocer cómo funciona</a></div>
             <div className="mt-10 flex flex-wrap gap-5 text-xs text-slate-400"><span>Almacenamiento privado</span><span>Integraciones API</span><span>Control de acceso</span></div>
