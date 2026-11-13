@@ -13,6 +13,7 @@ import { MemoriesPage } from '../pages/MemoriesPage'
 import { ServicesPage } from '../pages/ServicesPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { AdminPage } from '../pages/AdminPage'
+import { AssistantPage } from '../pages/AssistantPage'
 
 function useHash() {
   const read = () => window.location.hash.slice(1) || '/'
@@ -122,8 +123,8 @@ export default function App() {
     const home = session.mode === 'personal' ? '/panel' : '/servicio'
     const pages: Record<string, ReactElement> =
       session.mode === 'personal'
-        ? { '/panel': <DashboardPage />, '/archivos': <FilesPage />, '/recuerdos': <MemoriesPage />, '/ajustes': <SettingsPage />, '/admin': <AdminPage /> }
-        : { '/servicio': <ServicesPage />, '/ajustes': <SettingsPage />, '/admin': <AdminPage /> }
+        ? { '/panel': <DashboardPage />, '/archivos': <FilesPage />, '/recuerdos': <MemoriesPage />, '/ajustes': <SettingsPage />, '/asistente': <AssistantPage />, '/admin': <AdminPage /> }
+        : { '/servicio': <ServicesPage />, '/ajustes': <SettingsPage />, '/asistente': <AssistantPage />, '/admin': <AdminPage /> }
     view = pages[path] ? <Shell path={path}>{pages[path]}</Shell> : <Redirect to={home} />
   }
   const content = session && !session.demo ? <ConsentGate key={session.email} email={session.email}>{view}</ConsentGate> : view
