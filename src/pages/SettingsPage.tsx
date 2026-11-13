@@ -21,6 +21,13 @@ export function SettingsPage() {
   const [quotaInput, setQuotaInput] = useState('50')
   const [quotaBusy, setQuotaBusy] = useState(false)
   const [quotaNotice, setQuotaNotice] = useState('')
+  const [accountRole, setAccountRole] = useState('Verificando…')
+  useEffect(() => {
+    if (!supabase) { setAccountRole('Modo demostración'); return }
+    supabase.functions.invoke('admin-console', { body: { action: 'check_access' } })
+      .then(({ data, error }) => setAccountRole(error ? 'No se pudo verificar' : data?.role === 'super_admin' ? 'Administrador principal' : data?.role === 'admin' ? 'Administrador' : 'Usuario estándar'))
+      .catch(() => setAccountRole('No se pudo verificar'))
+  }, [])
   useEffect(() => {
     document.documentElement.classList.toggle('mt-reduced-motion', reduceMotion)
     localStorage.setItem('mt_reduce_motion', String(reduceMotion))
@@ -67,7 +74,7 @@ export function SettingsPage() {
         <Card title="Perfil">
           <input className={inputCls} readOnly value={session.name} aria-label="Nombre" />
           <input className={`${inputCls} mt-2`} readOnly value={session.email} aria-label="Correo" />
-          <p className="mt-2 text-xs text-slate-500">Perfil autenticado con Google.</p>
+          <p className="mt-2 text-xs text-slate-500">Perfil autenticado con Google.</p><p className="mt-2 text-xs text-slate-600">Permisos de cuenta: <strong>{accountRole}</strong></p>
         </Card>
         <Card title="Modalidad de cuenta">
           <p className="text-sm">Actual: <strong>{session.mode === 'personal' ? 'Cuenta personal' : 'Cuenta de servicio'}</strong></p>
