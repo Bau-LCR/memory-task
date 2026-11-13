@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import type { Activity, FileItem, Folder, Memory, MemoryInput, Mode, Session } from '../types'
 
 export const SOURCE_LABEL = 'Datos locales de demostración'
-export const QUOTA = 50 * 1024 * 1024
+export const QUOTA = 500 * 1024 * 1024
+// Supabase Free limita el tamaño individual a 50 MiB por objeto.
 export const MAX_FILE = 50 * 1024 * 1024
 export const STORAGE_BUCKET = 'memory-task-private'
 const BLOCKED = /\.(exe|dll|bat|cmd|ps1|msi|jar|apk|dmg|scr|com)$/i
@@ -204,7 +205,7 @@ export const api = {
       let used = current.used
       for (const file of selected) {
         if (BLOCKED.test(file.name)) { errors.push(file.name + ': tipo de archivo no permitido'); continue }
-        if (file.size > MAX_FILE) { errors.push(file.name + ': supera el máximo de 50 MB por archivo'); continue }
+        if (file.size > MAX_FILE) { errors.push(file.name + ': supera el máximo de 50 MiB por archivo'); continue }
         if (used + file.size > current.quota) { errors.push(file.name + ': supera la cuota de almacenamiento disponible en tu cuenta'); continue }
         const id = uid()
         const safeName = file.name.normalize('NFKC').replace(/[^\w.\-() ]/g, '_').slice(0, 180) || 'archivo'
@@ -228,7 +229,7 @@ export const api = {
     for (const file of selected) {
       if (BLOCKED.test(file.name)) errors.push(file.name + ': tipo de archivo no permitido')
       else if (file.size > MAX_FILE) errors.push(file.name + ': supera el máximo de 50 MB por archivo')
-      else if (used + file.size > QUOTA) errors.push(file.name + ': cuota de 50 MB agotada')
+      else if (used + file.size > QUOTA) errors.push(file.name + ': cuota de 500 MiB agotada')
       else { const id = uid(); files.unshift({ id, name: file.name, size: file.size, type: file.type || 'application/octet-stream', folderId, addedAt: now() }); demoBlobs.set(id, file); addedIds.push(id); used += file.size }
     }
     try { kv.set(K.files, files) } catch (error) { addedIds.forEach((id) => demoBlobs.delete(id)); throw error }
