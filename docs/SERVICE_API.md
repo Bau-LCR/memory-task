@@ -161,3 +161,16 @@ La categoría queda registrada para estadísticas y filtros. La estructura inter
 - El límite lógico no amplía el espacio físico disponible en el proyecto Supabase.
 - Las claves API se muestran una sola vez y pueden revocarse desde la consola.
 - La actividad de lectura, escritura, carga, descarga y eliminación queda registrada en la auditoría de la cuenta de servicio.
+
+## Explorador de datos de la consola
+
+La consola de Memory Task puede agrupar registros por usuario externo y mostrar su ID, cantidad de registros, chats y archivos. Para que la lista muestre nombre y correo, guardá un registro de categoría `user` con una clave como `profile` y campos `name` y `email` dentro de `data`. Esos campos son proporcionados por tu aplicación; Memory Task no los obtiene por su cuenta.
+
+Los registros JSON se pueden inspeccionar y editar desde el explorador. Los archivos privados generan enlaces temporales para su vista previa o descarga. Eliminar una aplicación borra sus claves y registros asociados, además de los archivos del bucket privado. Las claves revocadas pueden eliminarse definitivamente desde la consola.
+
+## Integración selectiva con Qutrial u otra aplicación
+
+La decisión de qué conversaciones guardar se toma en el backend de la aplicación integradora, después de autenticar al usuario. Por ejemplo, si querés guardar solamente las conversaciones de tu cuenta administradora en Memory Task, tu backend puede comparar el ID autenticado con el ID interno que ya conoce y llamar a la API de Memory Task solo para esa cuenta. Las conversaciones de los demás usuarios pueden seguir en el almacenamiento que elijas.
+
+No hagas esa comparación en el navegador ni publiques la clave API o la clave privada ES256. Cada chat se puede guardar como un registro de categoría `chat`, con una clave única por conversación y el ID externo autenticado como propietario.
+
