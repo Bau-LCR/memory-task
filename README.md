@@ -1,6 +1,6 @@
 # Memory Task
 
-Plataforma de almacenamiento y memoria para personas (cuenta personal) y aplicaciones (cuenta de servicio). **Estado: Etapa 1 completada (auditoría y reparación del frontend); sigue en modo demostración.** Ver [`PROGRESS.md`](PROGRESS.md). No hay servidor, autenticación real ni datos reales.
+Plataforma de almacenamiento y memoria para personas (cuenta personal) y aplicaciones (cuenta de servicio). **Estado:** el frontend y el código de backend están en desarrollo. Las funciones y migraciones existen en el repositorio, pero su funcionamiento en producción depende de aplicarlas y desplegarlas en Supabase. Ver [`PROGRESS.md`](PROGRESS.md). No se debe asumir que una función está activa solo porque exista su código.
 
 ## Ejecutar en local
 
@@ -21,7 +21,7 @@ src/app/          router (hash), sesión
 src/components/   ui, layout, memories
 src/pages/        una página por sección
 src/services/     api.ts (capa de servicios) y storage.ts (único uso de localStorage)
-src/features/     datos ilustrativos de la cuenta de servicio
+src/features/     componentes auxiliares de la cuenta de servicio
 backend/          reservado para la API (pendiente)
 ```
 
@@ -34,8 +34,8 @@ backend/          reservado para la API (pendiente)
 | Archivos: seleccionar, buscar, filtrar, carpetas, mover, eliminar, cuota de 25 MB | Funciona con datos locales. No hay subida a servidor y el contenido no persiste al recargar |
 | Exportar datos (JSON) y borrar datos de demostración | Funciona con datos locales |
 | Inicio de sesión | Solo modo demostración, sin verificación de identidad |
-| Cuenta de servicio (espacios, usuarios, sectores, API keys, consumo) | Solo ilustrativo; botones desactivados |
-| Google Sign-In, términos, API, PostgreSQL, almacenamiento externo, backups, IA | Pendiente: requiere backend y servicios externos |
+| Cuenta de servicio (aplicaciones, identidad ES256, API keys, consumo y explorador) | Interfaz conectada a `service-console`; requiere migraciones y despliegue de la función. La API externa requiere además desplegar `service-api` con Verify JWT desactivado |
+| Google Sign-In, términos, PostgreSQL, almacenamiento externo, IA y backups | Requieren completar la configuración y el despliegue de cada servicio externo |
 
 ## Despliegue automático (GitHub Pages)
 
