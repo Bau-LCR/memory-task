@@ -54,3 +54,13 @@ No se encontró `dangerouslySetInnerHTML` ni ejecución de contenido del usuario
 
 ### Próximo paso
 Etapa 2 (diseño y navegación completa), o saltar a la Etapa 3 si se prioriza el backend. Antes de elegir proveedores (Etapa 5) hay que verificar los planes gratuitos vigentes y que no exijan tarjeta.
+
+
+## Actualización — 14-nov-2026: cuenta de servicio
+
+Se agregó la implementación de backend para la cuenta de servicio:
+- `ServicesPage` llama a la Edge Function autenticada `service-console` para crear aplicaciones, registrar claves públicas ES256, generar/revocar API keys, administrar cuota y explorar registros.
+- `service-api` valida claves `mt_live_...`, scopes y tokens de identidad ES256; soporta registros JSON y archivos privados.
+- La migración de cuota personal se renombró para evitar una versión duplicada en el historial de migraciones.
+
+**Importante:** el código fuente existe, pero no se considera desplegado ni probado en producción hasta aplicar las migraciones y desplegar ambas Edge Functions en el proyecto Supabase correspondiente. La publicación de GitHub Pages solo publica el frontend; no despliega las funciones.
