@@ -37,6 +37,28 @@ backend/          reservado para la API (pendiente)
 | Cuenta de servicio (aplicaciones, identidad ES256, API keys, consumo y explorador) | Interfaz conectada a `service-console`; requiere migraciones y despliegue de la función. La API externa requiere además desplegar `service-api` con Verify JWT desactivado |
 | Google Sign-In, términos, PostgreSQL, almacenamiento externo, IA y backups | Requieren completar la configuración y el despliegue de cada servicio externo |
 
+
+## Vincular con Cut-real
+
+La consola de cuenta de servicio incluye la pestaña **Conectar Cut-real**. El flujo recomendado es:
+
+1. En **Aplicaciones y datos**, crear una aplicación llamada Cut-real si todavía no existe.
+2. En el administrador de Cut-real, abrir **Memory Task** y generar un par de identidad ES256.
+3. Copiar únicamente la clave pública JWK y pegarla en **Cuenta de servicio → Conectar Cut-real**. Si la aplicación ya tenía otra clave pública, actualizarla solo cuando también se vaya a utilizar la nueva clave privada correspondiente.
+4. Generar desde Memory Task una clave API para Cut-real con permisos `records:read` y `records:write`. La clave completa se muestra una sola vez.
+5. Copiar la URL de API, el ID de aplicación y la clave API a la pestaña **Administración → Memory Task** de Cut-real.
+6. En Cut-real, descargar el archivo local de secretos, guardarlo en la raíz del repositorio y ejecutar:
+
+```bash
+npx supabase secrets set --env-file memory-task-secrets.env
+```
+
+7. Volver a Cut-real, actualizar el estado y usar **Probar conexión**. La prueba crea y elimina un registro temporal.
+
+La clave privada ES256 se conserva únicamente en los secretos del servidor de Cut-real. Nunca se pega en Memory Task, GitHub, el frontend ni un chat. El archivo `memory-task-secrets.env` está excluido por `.gitignore`; eliminá la copia local después de cargar los secretos.
+
+La conexión real requiere que las migraciones estén aplicadas y que `service-console` y `service-api` estén desplegadas en el proyecto Supabase de Memory Task. El despliegue del frontend por GitHub Pages no despliega esas funciones.
+
 ## Despliegue automático (GitHub Pages)
 
 Cada push a `main` ejecuta `.github/workflows/deploy.yml`: instala, comprueba tipos, corre las pruebas, compila y publica en
