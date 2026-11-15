@@ -40,24 +40,17 @@ backend/          reservado para la API (pendiente)
 
 ## Vincular con Cut-real
 
-La consola de cuenta de servicio incluye la pestaña **Conectar Cut-real**. El flujo recomendado es:
+La pestaña **Conectar Cut-real** utiliza un emparejamiento temporal entre servidores:
 
-1. En **Aplicaciones y datos**, crear una aplicación llamada Cut-real si todavía no existe.
-2. En el administrador de Cut-real, abrir **Memory Task** y generar un par de identidad ES256.
-3. Copiar únicamente la clave pública JWK y pegarla en **Cuenta de servicio → Conectar Cut-real**. Si la aplicación ya tenía otra clave pública, actualizarla solo cuando también se vaya a utilizar la nueva clave privada correspondiente.
-4. Generar desde Memory Task una clave API para Cut-real con permisos `records:read` y `records:write`. La clave completa se muestra una sola vez.
-5. Copiar la URL de API, el ID de aplicación y la clave API a la pestaña **Administración → Memory Task** de Cut-real.
-6. En Cut-real, descargar el archivo local de secretos, guardarlo en la raíz del repositorio y ejecutar:
+1. En Cut-real → Administración → Memory Task, generá un código temporal.
+2. En Memory Task → Servicios → Conectar Cut-real, pegá el código y pulsá **Vincular ahora**.
+3. Memory Task crea o reutiliza una aplicación de servicio, registra la clave pública ES256 y genera una API key con permisos `records:read` y `records:write`.
+4. Memory Task entrega las credenciales directamente al endpoint de vinculación de Cut-real mediante una solicitud servidor a servidor.
+5. Cut-real cifra y conserva la API key y la identidad privada en su propia base de datos. Las claves privadas y API keys no se muestran ni se envían al navegador.
 
-```bash
-npx supabase secrets set --env-file memory-task-secrets.env
-```
+El código temporal vence a los 10 minutos y solo puede utilizarse una vez. Si el intercambio falla, generá un código nuevo. Si una aplicación ya tiene otra identidad registrada, el flujo automático crea una aplicación independiente para no romper la identidad anterior.
 
-7. Volver a Cut-real, actualizar el estado y usar **Probar conexión**. La prueba crea y elimina un registro temporal.
-
-La clave privada ES256 se conserva únicamente en los secretos del servidor de Cut-real. Nunca se pega en Memory Task, GitHub, el frontend ni un chat. El archivo `memory-task-secrets.env` está excluido por `.gitignore`; eliminá la copia local después de cargar los secretos.
-
-La conexión real requiere que las migraciones estén aplicadas y que `service-console` y `service-api` estén desplegadas en el proyecto Supabase de Memory Task. Si todavía no lo hiciste, desde la raíz del repositorio y con el proyecto correcto vinculado ejecutá `npx supabase db push` y luego `npx supabase functions deploy service-console service-api`. El despliegue del frontend por GitHub Pages no despliega esas funciones.
+La vinculación requiere que estén desplegadas las funciones `service-console`, `service-api` y `memory-task-pairing` en sus respectivos proyectos, además de las migraciones nuevas de Cut-real. Los workflows `deploy-supabase.yml` y `deploy-memory-task.yml` automatizan el despliegue al integrar los cambios en `main`. Para habilitarlos, agregá el secreto de repositorio `SUPABASE_ACCESS_TOKEN` en Memory Task; en Cut-real agregá `SUPABASE_ACCESS_TOKEN` y `SUPABASE_DB_PASSWORD`. Son secretos de GitHub Actions: no los agregues al código ni los compartas. El despliegue del frontend por GitHub Pages, por sí solo, no despliega funciones ni aplica migraciones.
 
 ## Despliegue automático (GitHub Pages)
 

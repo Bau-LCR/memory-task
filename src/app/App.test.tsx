@@ -161,7 +161,7 @@ describe('cuenta de servicio', () => {
   it('muestra la consola en desarrollo y avisa cuando Supabase no está configurado', async () => {
     await loginAs('service')
     await heading('Cuenta de servicio')
-    expect(screen.getByText(/El backend todavía no está desplegado/)).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Conectar Cut-real' })).toBeTruthy()
     expect(screen.getByText('Consola disponible')).toBeTruthy()
     expect((await screen.findByRole('alert')).textContent).toContain('Supabase no está configurado.')
     expect(isDisabled(screen.getByRole('button', { name: 'Crear aplicación' }))).toBe(true)

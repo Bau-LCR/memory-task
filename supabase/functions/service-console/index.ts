@@ -19,6 +19,13 @@ async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+
+function decodeBase64Url(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+}
+
 function randomSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return "mt_live_" + btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -176,6 +183,77 @@ Deno.serve(async (req) => {
       return json({ success: true, appId });
     }
 
+    if (action === "pair_cut_real") {
+      const pairingCode = typeof body.pairingCode === "string" ? body.pairingCode.trim() : "";
+      if (!pairingCode || pairingCode.length > 4096 || !pairingCode.startsWith("crpair1.")) return json({ error: "El código de vinculación no es válido." }, 400);
+      let pairing: any;
+      try { pairing = JSON.parse(new TextDecoder().decode(decodeBase64Url(pairingCode.slice(8)))); }
+      catch { return json({ error: "No se pudo leer el código de vinculación." }, 400); }
+      const callbackUrl = "https://vdgfrrdseqimbelgzsek.supabase.co/functions/v1/memory-task-pairing";
+      const publicKey = pairing?.publicJwk;
+      if (pairing?.v !== 1 || pairing?.callbackUrl !== callbackUrl || typeof pairing?.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(pairing.token) || !publicKey || publicKey.kty !== "EC" || publicKey.crv !== "P-256" || typeof publicKey.x !== "string" || typeof publicKey.y !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(publicKey.x) || !/^[A-Za-z0-9_-]{43}$/.test(publicKey.y) || "d" in publicKey) {
+        return json({ error: "El código está incompleto o no corresponde a Cut-real." }, 400);
+      }
+      let appId = typeof body.appId === "string" ? body.appId : "";
+      let app: any = null;
+      if (appId) {
+        const found = await admin.from("mt_service_apps").select("id,name,status,identity_public_key").eq("id", appId).eq("account_id", account.id).maybeSingle();
+        if (found.error) throw found.error;
+        app = found.data;
+        if (!app || app.status !== "active") return json({ error: "La aplicación seleccionada no existe o está suspendida." }, 404);
+      } else {
+        const found = await admin.from("mt_service_apps").select("id,name,status,identity_public_key").eq("account_id", account.id).eq("name", "Cut-real").eq("status", "active").limit(1).maybeSingle();
+        if (found.error) throw found.error;
+        app = found.data;
+      }
+      if (!app) {
+        const created = await admin.from("mt_service_apps").insert({ account_id: account.id, name: "Cut-real", description: "Conexión segura con Cut-real" }).select("id,name,status,identity_public_key").single();
+        if (created.error) throw created.error;
+        app = created.data;
+      }
+      if (app.identity_public_key && (app.identity_public_key.x !== publicKey.x || app.identity_public_key.y !== publicKey.y)) {
+        if (typeof body.appId === "string" && body.appId) {
+          return json({ error: "La aplicación seleccionada ya tiene otra identidad. Elegí una aplicación sin identidad o creá una nueva para conservar la conexión anterior." }, 409);
+        }
+        const created = await admin.from("mt_service_apps").insert({
+          account_id: account.id,
+          name: "Cut-real · conexión nueva",
+          description: "Identidad independiente creada durante la vinculación segura",
+        }).select("id,name,status,identity_public_key").single();
+        if (created.error) throw created.error;
+        app = created.data;
+      }
+      const registered = await admin.from("mt_service_apps").update({ identity_public_key: { kty: "EC", crv: "P-256", x: publicKey.x, y: publicKey.y, ext: true } }).eq("id", app.id).eq("account_id", account.id);
+      if (registered.error) throw registered.error;
+      const secret = randomSecret();
+      const secretHash = await sha256(secret);
+      const createdKey = await admin.from("mt_service_api_keys").insert({ account_id: account.id, app_id: app.id, name: "Cut-real · vinculación automática", key_prefix: secret.slice(0, 15), secret_hash: `\\x${secretHash}`, secret_hash_hex: secretHash, scopes: ["records:read", "records:write"] }).select("id").single();
+      if (createdKey.error) throw createdKey.error;
+      const apiEndpoint = url.replace(/\/$/, "") + "/functions/v1/service-api";
+      const sendCallback = () => fetch(callbackUrl, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + pairing.token, apikey: anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }),
+        signal: AbortSignal.timeout(12000),
+      });
+      let callbackResponse: Response;
+      try { callbackResponse = await sendCallback(); }
+      catch {
+        // Retry once: the first request may have reached Cut-real even if its response was lost.
+        try { callbackResponse = await sendCallback(); }
+        catch {
+          await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
+          return json({ error: "No se pudo completar el intercambio seguro con Cut-real. Generá un código nuevo y volvé a intentar." }, 502);
+        }
+      }
+      if (!callbackResponse.ok) {
+        await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
+        const detail = await callbackResponse.json().catch(() => ({}));
+        return json({ error: typeof detail?.error === "string" ? detail.error.slice(0, 300) : "Cut-real rechazó la vinculación. Generá un código nuevo y volvé a intentar." }, 502);
+      }
+      await admin.from("mt_service_audit").insert({ account_id: account.id, actor_id: ownerId, action: "cut_real_paired", details: { app_id: app.id, api_key_id: createdKey.data.id } });
+      return json({ success: true, appId: app.id, appName: app.name, message: "Cut-real quedó vinculado. Las credenciales se entregaron directamente entre servidores." });
+    }
     if (action === "create_key") {
       const appId = typeof body.appId === "string" ? body.appId : "";
       const name = typeof body.name === "string" ? body.name.trim() : "";
