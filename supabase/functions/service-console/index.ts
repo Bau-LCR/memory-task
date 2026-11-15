@@ -230,12 +230,21 @@ Deno.serve(async (req) => {
       const createdKey = await admin.from("mt_service_api_keys").insert({ account_id: account.id, app_id: app.id, name: "Cut-real · vinculación automática", key_prefix: secret.slice(0, 15), secret_hash: `\\x${secretHash}`, secret_hash_hex: secretHash, scopes: ["records:read", "records:write"] }).select("id").single();
       if (createdKey.error) throw createdKey.error;
       const apiEndpoint = url.replace(/\/$/, "") + "/functions/v1/service-api";
+      const sendCallback = () => fetch(callbackUrl, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + pairing.token, apikey: anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }),
+        signal: AbortSignal.timeout(12000),
+      });
       let callbackResponse: Response;
-      try {
-        callbackResponse = await fetch(callbackUrl, { method: "POST", headers: { Authorization: "Bearer " + pairing.token, apikey: anonKey, "Content-Type": "application/json" }, body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }), signal: AbortSignal.timeout(12000) });
-      } catch {
-        await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
-        return json({ error: "No se pudo completar el intercambio seguro con Cut-real. El intento se puede repetir con un código nuevo." }, 502);
+      try { callbackResponse = await sendCallback(); }
+      catch {
+        // Retry once: the first request may have reached Cut-real even if its response was lost.
+        try { callbackResponse = await sendCallback(); }
+        catch {
+          await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
+          return json({ error: "No se pudo completar el intercambio seguro con Cut-real. Generá un código nuevo y volvé a intentar." }, 502);
+        }
       }
       if (!callbackResponse.ok) {
         await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
