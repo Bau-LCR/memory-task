@@ -219,10 +219,11 @@ export function ServicesPage() {
           </label>
           <div><p className="text-xs text-slate-600">Estado de identidad</p><p className="mt-2 text-sm font-medium">{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Identidad registrada' : connectAppId ? 'Falta registrar la clave pública' : 'Seleccioná una aplicación'}</p></div>
         </div>
-        {connectAppId && !overview?.apps.find(a => a.id === connectAppId)?.identityConfigured && <div className="mt-3">
-          <label className="text-xs text-slate-600">Clave pública JWK que generaste en Cut-real</label>
-          <textarea className={inputCls + ' mt-1 min-h-24 font-mono text-xs'} value={connectPublicJwkText} onChange={e => setConnectPublicJwkText(e.target.value)} placeholder='Pegá aquí la clave pública JWK (no la privada)' />
-          <Button className="mt-2" onClick={() => void registerConnectIdentity()} disabled={busy || !connectPublicJwkText.trim()}>Registrar identidad</Button>
+        {connectAppId && <div className="mt-3">
+          <label className="text-xs text-slate-600">Clave pública JWK generada en Cut-real (solo la pública)</label>
+          <textarea className={inputCls + ' mt-1 min-h-24 font-mono text-xs'} value={connectPublicJwkText} onChange={e => setConnectPublicJwkText(e.target.value)} placeholder='Pegá aquí la clave pública JWK (nunca la privada)' />
+          <Button className="mt-2" onClick={() => void registerConnectIdentity()} disabled={busy || !connectPublicJwkText.trim()}>{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Actualizar identidad' : 'Registrar identidad'}</Button>
+          {overview?.apps.find(a => a.id === connectAppId)?.identityConfigured && <p className="mt-2 text-xs text-amber-700">La aplicación ya tiene una identidad. Al registrar esta clave pública, reemplazará la anterior. Hacelo solo si también vas a usar la clave privada nueva en Cut-real.</p>}
         </div>}
         {connectAppId && <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy}>Generar clave API para Cut-real</Button>
