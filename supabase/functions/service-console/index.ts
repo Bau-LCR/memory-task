@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       if (!callbackResponse.ok) {
         await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
         const detail = await callbackResponse.json().catch(() => ({}));
-        return json({ error: typeof detail?.error === "string" ? detail.error : "Cut-real rechazó la vinculación. Generá un código nuevo y volvé a intentar." }, 502);
+        return json({ error: typeof detail?.error === "string" ? detail.error.slice(0, 300) : "Cut-real rechazó la vinculación. Generá un código nuevo y volvé a intentar." }, 502);
       }
       await admin.from("mt_service_audit").insert({ account_id: account.id, actor_id: ownerId, action: "cut_real_paired", details: { app_id: app.id, api_key_id: createdKey.data.id } });
       return json({ success: true, appId: app.id, appName: app.name, message: "Cut-real quedó vinculado. Las credenciales se entregaron directamente entre servidores." });
