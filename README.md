@@ -50,7 +50,7 @@ La pestaña **Conectar Cut-real** utiliza un emparejamiento temporal entre servi
 
 El código temporal vence a los 10 minutos y solo puede utilizarse una vez. Si el intercambio falla, generá un código nuevo. Si una aplicación ya tiene otra identidad registrada, el flujo automático crea una aplicación independiente para no romper la identidad anterior.
 
-La vinculación requiere que estén desplegadas las funciones `service-console`, `service-api` y `memory-task-pairing` en sus respectivos proyectos, además de las migraciones nuevas de Cut-real. El despliegue del frontend por GitHub Pages no despliega funciones ni aplica migraciones de Supabase.
+La vinculación requiere que estén desplegadas las funciones `service-console`, `service-api` y `memory-task-pairing` en sus respectivos proyectos, además de las migraciones nuevas de Cut-real. Los workflows `deploy-supabase.yml` y `deploy-memory-task.yml` automatizan el despliegue al integrar los cambios en `main`. Para habilitarlos, agregá el secreto de repositorio `SUPABASE_ACCESS_TOKEN` en Memory Task; en Cut-real agregá `SUPABASE_ACCESS_TOKEN` y `SUPABASE_DB_PASSWORD`. Son secretos de GitHub Actions: no los agregues al código ni los compartas. El despliegue del frontend por GitHub Pages, por sí solo, no despliega funciones ni aplica migraciones.
 
 ## Despliegue automático (GitHub Pages)
 
