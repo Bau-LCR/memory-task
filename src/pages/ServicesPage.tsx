@@ -44,7 +44,7 @@ export function ServicesPage() {
   const [selectedObject, setSelectedObject] = useState<any>(null)
   const [objectJson, setObjectJson] = useState('')
   const [connectAppId, setConnectAppId] = useState('')
-  const [connectPublicJwkText, setConnectPublicJwkText] = useState('')
+  const [connectPairingCode, setConnectPairingCode] = useState('')
   const [activeSection, setActiveSection] = useState<'apps' | 'connect'>('apps')
 
   const load = useCallback(async () => {
@@ -57,16 +57,20 @@ export function ServicesPage() {
 
   useEffect(() => { void load() }, [load])
 
-  const registerConnectIdentity = async () => {
-    if (!connectAppId) return
+  const pairCutReal = async () => {
+    if (!connectPairingCode.trim()) return
     setBusy(true); setError(''); setNotice('')
     try {
-      const publicKey = JSON.parse(connectPublicJwkText)
-      await callService({ action: 'set_identity_public_key', appId: connectAppId, publicKey })
-      setConnectPublicJwkText('')
-      setNotice('Identidad de Cut-real registrada correctamente. La clave privada permanece en Cut-real.')
+      const result = await callService<{ appId: string; appName: string; message: string }>({
+        action: 'pair_cut_real',
+        pairingCode: connectPairingCode.trim(),
+        ...(connectAppId ? { appId: connectAppId } : {}),
+      })
+      setConnectPairingCode('')
+      setConnectAppId(result.appId)
+      setNotice(result.message || 'Cut-real quedó vinculado correctamente.')
       await load()
-    } catch (e) { setError('No se pudo registrar la identidad: ' + (e as Error).message) }
+    } catch (e) { setError('No se pudo completar la vinculación: ' + (e as Error).message) }
     finally { setBusy(false) }
   }
 
@@ -208,43 +212,23 @@ export function ServicesPage() {
       </div>
       </>}
       {activeSection === 'connect' && <>
-      <Card title="Conectar Cut-real">
-        <p className="text-sm text-slate-600">Vinculá Cut-real con esta cuenta de Memory Task. La conexión usa una aplicación, una clave API y una identidad ES256. No compartas la clave privada: se configura únicamente en el servidor de Cut-real.</p>
-        {!overview?.apps.length && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Todavía no hay una aplicación. Primero creá una aplicación llamada Cut-real en la pestaña Aplicaciones y datos.<div className="mt-2"><Button onClick={() => setActiveSection('apps')}>Crear aplicación</Button></div></div>}
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <label className="text-xs text-slate-600">Aplicación de Cut-real
-            <select className={inputCls + ' mt-1'} value={connectAppId} onChange={e => { setConnectAppId(e.target.value); setConnectPublicJwkText('') }}>
-              <option value="">Elegí una aplicación</option>
-              {(overview?.apps ?? []).map(app => <option key={app.id} value={app.id}>{app.name} · {app.identityConfigured ? 'identidad lista' : 'falta identidad'}</option>)}
-            </select>
-          </label>
-          <div><p className="text-xs text-slate-600">Estado de identidad</p><p className="mt-2 text-sm font-medium">{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Identidad registrada' : connectAppId ? 'Falta registrar la clave pública' : 'Seleccioná una aplicación'}</p><p className="mt-1 text-xs text-slate-500">{connectAppId && overview?.keys.some(k => k.app_id === connectAppId && k.status === 'active') ? 'Hay una clave API activa' : connectAppId ? 'Todavía no hay una clave API activa' : ''}</p></div>
+      <Card title="Vincular Cut-real automáticamente">
+        <p className="text-sm text-slate-600">La vinculación se completa entre los servidores. No vas a copiar claves privadas, API keys ni configurar secretos manualmente.</p>
+        {(overview?.apps ?? []).length > 0 && <label className="mt-3 block text-xs text-slate-600">Aplicación de servicio (opcional)
+          <select className={inputCls + ' mt-1'} value={connectAppId} onChange={e => setConnectAppId(e.target.value)}>
+            <option value="">Crear o reutilizar automáticamente «Cut-real»</option>
+            {(overview?.apps ?? []).map(app => <option key={app.id} value={app.id}>{app.name} · {app.identityConfigured ? 'identidad existente' : 'sin identidad'}</option>)}
+          </select>
+        </label>}
+        <label className="mt-3 block text-xs text-slate-600">Código temporal generado en Cut-real
+          <textarea className={inputCls + ' mt-1 min-h-28 font-mono text-xs'} value={connectPairingCode} onChange={e => setConnectPairingCode(e.target.value)} placeholder="Pegá aquí el código de vinculación de Cut-real" autoComplete="off" spellCheck={false} />
+        </label>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button onClick={() => void pairCutReal()} disabled={busy || !connectPairingCode.trim()}>Vincular ahora</Button>
+          <Button variant="ghost" onClick={() => { setConnectPairingCode(''); setConnectAppId('') }} disabled={busy}>Limpiar</Button>
         </div>
-        {connectAppId && <div className="mt-3">
-          <label className="text-xs text-slate-600">Clave pública JWK generada en Cut-real (solo la pública)</label>
-          <textarea className={inputCls + ' mt-1 min-h-24 font-mono text-xs'} value={connectPublicJwkText} onChange={e => setConnectPublicJwkText(e.target.value)} placeholder='Pegá aquí la clave pública JWK (nunca la privada)' />
-          <Button className="mt-2" onClick={() => void registerConnectIdentity()} disabled={busy || !connectPublicJwkText.trim()}>{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Actualizar identidad' : 'Registrar identidad'}</Button>
-          {overview?.apps.find(a => a.id === connectAppId)?.identityConfigured && <p className="mt-2 text-xs text-amber-700">La aplicación ya tiene una identidad. Al registrar esta clave pública, reemplazará la anterior. Hacelo solo si también vas a usar la clave privada nueva en Cut-real.</p>}
-        </div>}
-        {connectAppId && <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy || !overview?.apps.find(a => a.id === connectAppId)?.identityConfigured}>Generar clave API para Cut-real</Button>
-          <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(apiEndpoint)} disabled={!apiEndpoint.startsWith('https://')}>Copiar URL de API</Button>
-          <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(connectAppId)}>Copiar App ID</Button>
-        </div>}
-        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-          **Datos que vas a copiar a Cut-real:** URL de API: <code className="break-all">{apiEndpoint}</code>
-          {connectAppId && <><br />ID de aplicación: <code className="break-all">{connectAppId}</code></>}
-          <br />La clave API se muestra una sola vez al generarla. Después pegás esos datos en Administración → Integraciones → Memory Task de Cut-real.
-        </div>
+        <p className="mt-3 text-xs text-slate-500">El código vence en 10 minutos y solo puede utilizarse una vez. Memory Task crea la aplicación y una API key con permisos records:read y records:write cuando haga falta, registra la clave pública y entrega las credenciales directamente al servidor de Cut-real.</p>
       </Card>
-      {keyAppId === connectAppId && connectAppId && <Card title="Generar clave API para Cut-real">
-        <form onSubmit={createKey} className="flex flex-wrap gap-2">
-          <input className={inputCls + ' min-w-48 flex-1'} value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Nombre de la clave" maxLength={80} required />
-          <Button type="submit" disabled={busy || !keyName.trim()}>Generar clave</Button>
-          <Button type="button" variant="ghost" onClick={() => setKeyAppId('')}>Cancelar</Button>
-        </form>
-        <p className="mt-2 text-xs text-slate-500">Se crearán permisos de lectura y escritura de registros. La clave completa se mostrará una sola vez.</p>
-      </Card>}
       </>}
       {activeSection === 'apps' && <>
       <Card title="Crear aplicación">
