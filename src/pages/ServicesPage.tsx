@@ -45,6 +45,7 @@ export function ServicesPage() {
   const [objectJson, setObjectJson] = useState('')
   const [connectAppId, setConnectAppId] = useState('')
   const [connectPublicJwkText, setConnectPublicJwkText] = useState('')
+  const [activeSection, setActiveSection] = useState<'apps' | 'connect'>('apps')
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -190,16 +191,22 @@ export function ServicesPage() {
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" role="tablist" aria-label="Secciones de cuenta de servicio">
+        <button role="tab" aria-selected={activeSection === 'apps'} className={activeSection === 'apps' ? 'rounded-lg bg-navy px-3 py-2 text-sm text-white' : 'rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100'} onClick={() => setActiveSection('apps')}>Aplicaciones y datos</button>
+        <button role="tab" aria-selected={activeSection === 'connect'} className={activeSection === 'connect' ? 'rounded-lg bg-navy px-3 py-2 text-sm text-white' : 'rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100'} onClick={() => setActiveSection('connect')}>Conectar Cut-real</button>
+      </div>
       {newSecret && <Card title="Nueva clave API — guardala ahora">
         <p className="mb-2 text-sm text-amber-800">Esta es la única vez que se mostrará. No la compartas ni la publiques en código de navegador.</p>
         <code className="block break-all rounded bg-slate-100 p-3 text-sm">{newSecret}</code>
         <div className="mt-3 flex gap-2"><Button onClick={copySecret}>Copiar clave</Button><Button variant="ghost" onClick={() => setNewSecret('')}>Ya la guardé</Button></div>
       </Card>}
+      {activeSection === 'apps' && <>
       <div className="grid gap-4 sm:grid-cols-3">
         <Card><p className="text-xs text-slate-500">Aplicaciones</p><p className="text-2xl font-bold text-navy">{overview?.apps.length ?? '—'}</p></Card>
         <Card><p className="text-xs text-slate-500">Claves API activas</p><p className="text-2xl font-bold text-navy">{overview?.keys.filter(k => k.status === 'active').length ?? '—'}</p></Card>
         <Card><p className="text-xs text-slate-500">Almacenamiento compartido</p><p className="text-lg font-bold text-navy">{fmtSize(used)} / {fmtSize(quota)}</p><div className="mt-2 h-2 overflow-hidden rounded bg-slate-200"><div className="h-full bg-brand" style={{ width: pct + '%' }} /></div><div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-600">Cuota total en MiB<input className={inputCls + ' mt-1 w-32'} type="number" min="50" max="5120" step="1" value={quotaInput} onChange={e => setQuotaInput(e.target.value)} /></label><Button variant="ghost" onClick={() => void saveQuota()} disabled={busy}>Cambiar cuota</Button></div><p className="mt-2 text-xs text-slate-500">Límite lógico compartido entre todas tus aplicaciones. No amplía el espacio físico disponible en Supabase.</p></Card>
       </div>
+      {activeSection === 'connect' && <>
       <Card title="Conectar Cut-real">
         <p className="text-sm text-slate-600">Vinculá Cut-real con esta cuenta de Memory Task. La conexión usa una aplicación, una clave API y una identidad ES256. No compartas la clave privada: se configura únicamente en el servidor de Cut-real.</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -226,6 +233,16 @@ export function ServicesPage() {
           <br />La clave API se muestra una sola vez al generarla. Después pegás esos datos en Administración → Integraciones → Memory Task de Cut-real.
         </div>
       </Card>
+      {keyAppId === connectAppId && connectAppId && <Card title="Generar clave API para Cut-real">
+        <form onSubmit={createKey} className="flex flex-wrap gap-2">
+          <input className={inputCls + ' min-w-48 flex-1'} value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Nombre de la clave" maxLength={80} required />
+          <Button type="submit" disabled={busy || !keyName.trim()}>Generar clave</Button>
+          <Button type="button" variant="ghost" onClick={() => setKeyAppId('')}>Cancelar</Button>
+        </form>
+        <p className="mt-2 text-xs text-slate-500">Se crearán permisos de lectura y escritura de registros. La clave completa se mostrará una sola vez.</p>
+      </Card>}
+      </>}
+      {activeSection === 'apps' && <>
       <Card title="Crear aplicación">
         <form onSubmit={createApp} className="grid gap-2 sm:grid-cols-2">
           <input className={inputCls} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la aplicación" maxLength={80} required />
@@ -268,6 +285,7 @@ export function ServicesPage() {
         <p className="mt-2 text-xs text-slate-500">Categorías previstas: usuarios, chats, documentos, imágenes (metadatos) y datos personalizados. Los archivos binarios usan operaciones específicas de carga, listado, descarga y eliminación.</p>
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
+      </>}
       <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El backend todavía no está desplegado con la nueva API en Supabase; la función service-api ya está preparada y quedará activa después de desplegarla y probarla. Cada aplicación debe registrar una clave pública para validar identidades externas firmadas.</p>
     </div>
   )
