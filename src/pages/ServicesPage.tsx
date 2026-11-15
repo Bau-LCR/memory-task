@@ -43,6 +43,8 @@ export function ServicesPage() {
   const [explorer, setExplorer] = useState<any>(null)
   const [selectedObject, setSelectedObject] = useState<any>(null)
   const [objectJson, setObjectJson] = useState('')
+  const [connectAppId, setConnectAppId] = useState('')
+  const [connectPublicJwkText, setConnectPublicJwkText] = useState('')
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -53,6 +55,19 @@ export function ServicesPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  const registerConnectIdentity = async () => {
+    if (!connectAppId) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const publicKey = JSON.parse(connectPublicJwkText)
+      await callService({ action: 'set_identity_public_key', appId: connectAppId, publicKey })
+      setConnectPublicJwkText('')
+      setNotice('Identidad de Cut-real registrada correctamente. La clave privada permanece en Cut-real.')
+      await load()
+    } catch (e) { setError('No se pudo registrar la identidad: ' + (e as Error).message) }
+    finally { setBusy(false) }
+  }
 
   const saveIdentityKey = async () => {
     if (!identityAppId) return
@@ -185,6 +200,32 @@ export function ServicesPage() {
         <Card><p className="text-xs text-slate-500">Claves API activas</p><p className="text-2xl font-bold text-navy">{overview?.keys.filter(k => k.status === 'active').length ?? '—'}</p></Card>
         <Card><p className="text-xs text-slate-500">Almacenamiento compartido</p><p className="text-lg font-bold text-navy">{fmtSize(used)} / {fmtSize(quota)}</p><div className="mt-2 h-2 overflow-hidden rounded bg-slate-200"><div className="h-full bg-brand" style={{ width: pct + '%' }} /></div><div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-600">Cuota total en MiB<input className={inputCls + ' mt-1 w-32'} type="number" min="50" max="5120" step="1" value={quotaInput} onChange={e => setQuotaInput(e.target.value)} /></label><Button variant="ghost" onClick={() => void saveQuota()} disabled={busy}>Cambiar cuota</Button></div><p className="mt-2 text-xs text-slate-500">Límite lógico compartido entre todas tus aplicaciones. No amplía el espacio físico disponible en Supabase.</p></Card>
       </div>
+      <Card title="Conectar Cut-real">
+        <p className="text-sm text-slate-600">Vinculá Cut-real con esta cuenta de Memory Task. La conexión usa una aplicación, una clave API y una identidad ES256. No compartas la clave privada: se configura únicamente en el servidor de Cut-real.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-xs text-slate-600">Aplicación de Cut-real
+            <select className={inputCls + ' mt-1'} value={connectAppId} onChange={e => { setConnectAppId(e.target.value); setConnectPublicJwkText('') }}>
+              <option value="">Elegí una aplicación</option>
+              {(overview?.apps ?? []).map(app => <option key={app.id} value={app.id}>{app.name} · {app.identityConfigured ? 'identidad lista' : 'falta identidad'}</option>)}
+            </select>
+          </label>
+          <div><p className="text-xs text-slate-600">Estado de identidad</p><p className="mt-2 text-sm font-medium">{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Identidad registrada' : connectAppId ? 'Falta registrar la clave pública' : 'Seleccioná una aplicación'}</p></div>
+        </div>
+        {connectAppId && !overview?.apps.find(a => a.id === connectAppId)?.identityConfigured && <div className="mt-3">
+          <label className="text-xs text-slate-600">Clave pública JWK que generaste en Cut-real</label>
+          <textarea className={inputCls + ' mt-1 min-h-24 font-mono text-xs'} value={connectPublicJwkText} onChange={e => setConnectPublicJwkText(e.target.value)} placeholder='Pegá aquí la clave pública JWK (no la privada)' />
+          <Button className="mt-2" onClick={() => void registerConnectIdentity()} disabled={busy || !connectPublicJwkText.trim()}>Registrar identidad</Button>
+        </div>}
+        {connectAppId && <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy}>Generar clave API para Cut-real</Button>
+          <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(apiEndpoint)} disabled={!apiEndpoint.startsWith('https://')}>Copiar URL de API</Button>
+        </div>}
+        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+          **Datos que vas a copiar a Cut-real:** URL de API: <code className="break-all">{apiEndpoint}</code>
+          {connectAppId && <><br />ID de aplicación: <code className="break-all">{connectAppId}</code></>}
+          <br />La clave API se muestra una sola vez al generarla. Después pegás esos datos en Administración → Integraciones → Memory Task de Cut-real.
+        </div>
+      </Card>
       <Card title="Crear aplicación">
         <form onSubmit={createApp} className="grid gap-2 sm:grid-cols-2">
           <input className={inputCls} value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la aplicación" maxLength={80} required />
