@@ -211,7 +211,18 @@ Deno.serve(async (req) => {
         if (created.error) throw created.error;
         app = created.data;
       }
-      if (app.identity_public_key && (app.identity_public_key.x !== publicKey.x || app.identity_public_key.y !== publicKey.y)) return json({ error: "La aplicación ya tiene otra identidad registrada. Elegí otra aplicación o creá una nueva para evitar romper una conexión existente." }, 409);
+      if (app.identity_public_key && (app.identity_public_key.x !== publicKey.x || app.identity_public_key.y !== publicKey.y)) {
+        if (typeof body.appId === "string" && body.appId) {
+          return json({ error: "La aplicación seleccionada ya tiene otra identidad. Elegí una aplicación sin identidad o creá una nueva para conservar la conexión anterior." }, 409);
+        }
+        const created = await admin.from("mt_service_apps").insert({
+          account_id: account.id,
+          name: "Cut-real · conexión nueva",
+          description: "Identidad independiente creada durante la vinculación segura",
+        }).select("id,name,status,identity_public_key").single();
+        if (created.error) throw created.error;
+        app = created.data;
+      }
       const registered = await admin.from("mt_service_apps").update({ identity_public_key: { kty: "EC", crv: "P-256", x: publicKey.x, y: publicKey.y, ext: true } }).eq("id", app.id).eq("account_id", account.id);
       if (registered.error) throw registered.error;
       const secret = randomSecret();
@@ -221,7 +232,7 @@ Deno.serve(async (req) => {
       const apiEndpoint = url.replace(/\/$/, "") + "/functions/v1/service-api";
       let callbackResponse: Response;
       try {
-        callbackResponse = await fetch(callbackUrl, { method: "POST", headers: { Authorization: "Bearer " + pairing.token, "Content-Type": "application/json" }, body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }), signal: AbortSignal.timeout(12000) });
+        callbackResponse = await fetch(callbackUrl, { method: "POST", headers: { Authorization: "Bearer " + pairing.token, apikey: anonKey, "Content-Type": "application/json" }, body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }), signal: AbortSignal.timeout(12000) });
       } catch {
         await admin.from("mt_service_api_keys").update({ status: "revoked", revoked_at: new Date().toISOString() }).eq("id", createdKey.data.id);
         return json({ error: "No se pudo completar el intercambio seguro con Cut-real. El intento se puede repetir con un código nuevo." }, 502);
