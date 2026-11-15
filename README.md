@@ -57,7 +57,7 @@ npx supabase secrets set --env-file memory-task-secrets.env
 
 La clave privada ES256 se conserva únicamente en los secretos del servidor de Cut-real. Nunca se pega en Memory Task, GitHub, el frontend ni un chat. El archivo `memory-task-secrets.env` está excluido por `.gitignore`; eliminá la copia local después de cargar los secretos.
 
-La conexión real requiere que las migraciones estén aplicadas y que `service-console` y `service-api` estén desplegadas en el proyecto Supabase de Memory Task. El despliegue del frontend por GitHub Pages no despliega esas funciones.
+La conexión real requiere que las migraciones estén aplicadas y que `service-console` y `service-api` estén desplegadas en el proyecto Supabase de Memory Task. Si todavía no lo hiciste, desde la raíz del repositorio y con el proyecto correcto vinculado ejecutá `npx supabase db push` y luego `npx supabase functions deploy service-console service-api`. El despliegue del frontend por GitHub Pages no despliega esas funciones.
 
 ## Despliegue automático (GitHub Pages)
 
