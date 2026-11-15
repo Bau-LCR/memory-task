@@ -206,6 +206,7 @@ export function ServicesPage() {
         <Card><p className="text-xs text-slate-500">Claves API activas</p><p className="text-2xl font-bold text-navy">{overview?.keys.filter(k => k.status === 'active').length ?? '—'}</p></Card>
         <Card><p className="text-xs text-slate-500">Almacenamiento compartido</p><p className="text-lg font-bold text-navy">{fmtSize(used)} / {fmtSize(quota)}</p><div className="mt-2 h-2 overflow-hidden rounded bg-slate-200"><div className="h-full bg-brand" style={{ width: pct + '%' }} /></div><div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-600">Cuota total en MiB<input className={inputCls + ' mt-1 w-32'} type="number" min="50" max="5120" step="1" value={quotaInput} onChange={e => setQuotaInput(e.target.value)} /></label><Button variant="ghost" onClick={() => void saveQuota()} disabled={busy}>Cambiar cuota</Button></div><p className="mt-2 text-xs text-slate-500">Límite lógico compartido entre todas tus aplicaciones. No amplía el espacio físico disponible en Supabase.</p></Card>
       </div>
+      </>}
       {activeSection === 'connect' && <>
       <Card title="Conectar Cut-real">
         <p className="text-sm text-slate-600">Vinculá Cut-real con esta cuenta de Memory Task. La conexión usa una aplicación, una clave API y una identidad ES256. No compartas la clave privada: se configura únicamente en el servidor de Cut-real.</p>
