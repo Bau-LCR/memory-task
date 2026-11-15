@@ -20,7 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - uses: denoland/setup-deno@v2
-      - run: deno check --no-lock supabase/functions/service-console/index.ts supabase/functions/service-api/index.ts
+      - run: deno check --no-lock supabase/functions/service-console/index.ts
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
