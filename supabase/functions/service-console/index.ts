@@ -218,7 +218,7 @@ Deno.serve(async (req) => {
       const secretHash = await sha256(secret);
       const createdKey = await admin.from("mt_service_api_keys").insert({ account_id: account.id, app_id: app.id, name: "Cut-real · vinculación automática", key_prefix: secret.slice(0, 15), secret_hash: `\\x${secretHash}`, secret_hash_hex: secretHash, scopes: ["records:read", "records:write"] }).select("id").single();
       if (createdKey.error) throw createdKey.error;
-      const apiEndpoint = url.replace(/\\/$/, "") + "/functions/v1/service-api";
+      const apiEndpoint = url.replace(/\/$/, "") + "/functions/v1/service-api";
       let callbackResponse: Response;
       try {
         callbackResponse = await fetch(callbackUrl, { method: "POST", headers: { Authorization: "Bearer " + pairing.token, "Content-Type": "application/json" }, body: JSON.stringify({ appId: app.id, apiKey: secret, endpoint: apiEndpoint }), signal: AbortSignal.timeout(12000) });
