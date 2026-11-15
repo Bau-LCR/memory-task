@@ -210,6 +210,7 @@ export function ServicesPage() {
       {activeSection === 'connect' && <>
       <Card title="Conectar Cut-real">
         <p className="text-sm text-slate-600">Vinculá Cut-real con esta cuenta de Memory Task. La conexión usa una aplicación, una clave API y una identidad ES256. No compartas la clave privada: se configura únicamente en el servidor de Cut-real.</p>
+        {!overview?.apps.length && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Todavía no hay una aplicación. Primero creá una aplicación llamada Cut-real en la pestaña Aplicaciones y datos.<div className="mt-2"><Button onClick={() => setActiveSection('apps')}>Crear aplicación</Button></div></div>}
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <label className="text-xs text-slate-600">Aplicación de Cut-real
             <select className={inputCls + ' mt-1'} value={connectAppId} onChange={e => { setConnectAppId(e.target.value); setConnectPublicJwkText('') }}>
@@ -226,7 +227,7 @@ export function ServicesPage() {
           {overview?.apps.find(a => a.id === connectAppId)?.identityConfigured && <p className="mt-2 text-xs text-amber-700">La aplicación ya tiene una identidad. Al registrar esta clave pública, reemplazará la anterior. Hacelo solo si también vas a usar la clave privada nueva en Cut-real.</p>}
         </div>}
         {connectAppId && <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy}>Generar clave API para Cut-real</Button>
+          <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy || !overview?.apps.find(a => a.id === connectAppId)?.identityConfigured}>Generar clave API para Cut-real</Button>
           <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(apiEndpoint)} disabled={!apiEndpoint.startsWith('https://')}>Copiar URL de API</Button>
         </div>}
         <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
@@ -288,7 +289,7 @@ export function ServicesPage() {
         <p className="mt-2 text-xs text-amber-800">Importante: la clave API debe permanecer en el backend de tu aplicación, nunca en una web pública ni en una APK. Tu servidor debe autenticar al usuario antes de enviar su identificador externo.</p>
       </Card>
       </>}
-      <p className="text-xs text-slate-500">La consola administra aplicaciones y credenciales. El backend todavía no está desplegado con la nueva API en Supabase; la función service-api ya está preparada y quedará activa después de desplegarla y probarla. Cada aplicación debe registrar una clave pública para validar identidades externas firmadas.</p>
+      <p className="text-xs text-slate-500">La conexión requiere que las migraciones y la función service-api estén desplegadas en el proyecto Supabase de Memory Task. Después de configurar Cut-real, usá Administración → Memory Task → Probar conexión para verificar el intercambio real de datos.</p>
     </div>
   )
 }
