@@ -218,7 +218,7 @@ export function ServicesPage() {
               {(overview?.apps ?? []).map(app => <option key={app.id} value={app.id}>{app.name} · {app.identityConfigured ? 'identidad lista' : 'falta identidad'}</option>)}
             </select>
           </label>
-          <div><p className="text-xs text-slate-600">Estado de identidad</p><p className="mt-2 text-sm font-medium">{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Identidad registrada' : connectAppId ? 'Falta registrar la clave pública' : 'Seleccioná una aplicación'}</p></div>
+          <div><p className="text-xs text-slate-600">Estado de identidad</p><p className="mt-2 text-sm font-medium">{overview?.apps.find(a => a.id === connectAppId)?.identityConfigured ? 'Identidad registrada' : connectAppId ? 'Falta registrar la clave pública' : 'Seleccioná una aplicación'}</p><p className="mt-1 text-xs text-slate-500">{connectAppId && overview?.keys.some(k => k.app_id === connectAppId && k.status === 'active') ? 'Hay una clave API activa' : connectAppId ? 'Todavía no hay una clave API activa' : ''}</p></div>
         </div>
         {connectAppId && <div className="mt-3">
           <label className="text-xs text-slate-600">Clave pública JWK generada en Cut-real (solo la pública)</label>
@@ -229,6 +229,7 @@ export function ServicesPage() {
         {connectAppId && <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button onClick={() => { setKeyAppId(connectAppId); setKeyName('Cut-real — producción'); setKeyScopes(['records:read', 'records:write']) }} disabled={busy || !overview?.apps.find(a => a.id === connectAppId)?.identityConfigured}>Generar clave API para Cut-real</Button>
           <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(apiEndpoint)} disabled={!apiEndpoint.startsWith('https://')}>Copiar URL de API</Button>
+          <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(connectAppId)}>Copiar App ID</Button>
         </div>}
         <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
           **Datos que vas a copiar a Cut-real:** URL de API: <code className="break-all">{apiEndpoint}</code>
