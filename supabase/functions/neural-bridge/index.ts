@@ -75,6 +75,28 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     if (!mtUrl || !serviceKey) return reply(req, { error: "El servicio de almacenamiento de Memory Task no está configurado." }, 503);
     const db = createClient(mtUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    // Autorreparación: versiones anteriores podían desplegar el puente sin
+    // registrar la aplicación en mt_service_apps. En ese caso cada escritura
+    // fallaba por la FK app_id y el panel mostraba 0 bytes.
+    const { data: accountRow, error: accountCheckError } = await db
+      .from("mt_service_accounts").select("id,quota_bytes").eq("id", ACCOUNT_ID).maybeSingle();
+    if (accountCheckError) throw accountCheckError;
+    if (!accountRow) return reply(req, { error: "La cuenta de almacenamiento de Memory Task no existe." }, 503);
+    const { data: appRow, error: appCheckError } = await db
+      .from("mt_service_apps").select("id,account_id").eq("id", APP_ID).maybeSingle();
+    if (appCheckError) throw appCheckError;
+    if (!appRow) {
+      const { error: appCreateError } = await db.from("mt_service_apps").insert({
+        id: APP_ID, account_id: ACCOUNT_ID, name: "Cut-real 2 · Laboratorio neuronal",
+        description: "Almacenamiento privado de arquitectura, memoria curada, personalidad y entrenamiento del Laboratorio neuronal.",
+        status: "active",
+      });
+      if (appCreateError) throw appCreateError;
+    } else if (appRow.account_id !== ACCOUNT_ID) {
+      return reply(req, { error: "La aplicación de Laboratorio neuronal está asociada a otra cuenta de almacenamiento." }, 409);
+    }
+
     const body = await req.json().catch(() => ({}));
     const action = typeof body.action === "string" ? body.action : "";
 
