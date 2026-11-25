@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 
 const NAV: Record<Mode, ReadonlyArray<readonly [string, string]>> = {
   personal: [['/panel', 'Panel'], ['/archivos', 'Archivos'], ['/recuerdos', 'Recuerdos'], ['/asistente', 'Asistente IA'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
-  service: [['/servicio', 'Servicio'], ['/asistente', 'Asistente IA'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
+  service: [['/servicio', 'Servicio'], ['/memoria-neuronal', 'Memoria neuronal'], ['/asistente', 'Asistente IA'], ['/admin', 'Administración'], ['/ajustes', 'Ajustes']],
 }
 
 export function Shell({ path, children }: { path: string; children: ReactNode }) {
