@@ -72,3 +72,16 @@ El sitio usa rutas relativas (`base: './'`) y un router por hash, por lo que fun
 
 El repositorio es público: todo lo que se suba es visible. No subas `.env` ni secretos (el `.gitignore` ya los excluye) y no actives
 facturación ni vincules tarjetas en ningún servicio. Todo lo que empiece con `VITE_` queda visible en el navegador.
+
+
+## Integración privada con Cut-real 2
+
+El espacio de servicio **Cut-real** está dedicado al Laboratorio neuronal. La función `neural-bridge` recibe sesiones de Cut-real, valida la identidad en el proyecto de origen y comprueba el rol `owner` o `admin` antes de leer o escribir.
+
+- La arquitectura principal, sus conexiones, pesos, personalidad y posiciones se guarda en fragmentos bajo el identificador compartido `cutreal-neural-global`.
+- Los recuerdos de conversación se guardan bajo el identificador externo de la propia cuenta. No se leen ni se mezclan historiales privados de otras cuentas.
+- Los ejemplos de entrenamiento compartido deben ser aportados voluntariamente; no se importan chats ajenos automáticamente.
+- La página de Memoria neuronal permite revisar, buscar, editar y eliminar registros; la cuota y los bytes se calculan desde `mt_service_accounts` y `mt_service_objects`.
+- La función de puente valida los JWT de Cut-real contra su Auth y consulta `cr_user_roles` con RLS. El endpoint no confía en el origen del navegador como mecanismo de autorización.
+
+La interfaz de memoria neuronal no reemplaza las herramientas de almacenamiento personal de Memory Task; el proyecto de servicio y su cuota están aislados para Cut-real.
