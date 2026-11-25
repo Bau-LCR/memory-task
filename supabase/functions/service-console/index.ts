@@ -116,6 +116,77 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "neural_memory_list" || action === "neural_memory_usage") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      if (!appId) return json({ error: "Falta el identificador de la aplicación." }, 400);
+      const { data: app, error: appError } = await admin.from("mt_service_apps")
+        .select("id,name").eq("id", appId).eq("account_id", account.id).maybeSingle();
+      if (appError) throw appError;
+      if (!app) return json({ error: "Aplicación no encontrada." }, 404);
+      const externalUserId = typeof body.externalUserId === "string" ? body.externalUserId.trim() : "";
+      const baseQuery = () => admin.from("mt_service_objects")
+        .select("id,app_id,external_user_id,object_category,object_key,payload,size_bytes,created_at,updated_at", { count: "exact" })
+        .eq("account_id", account.id).eq("app_id", appId).eq("object_type", "record");
+      if (action === "neural_memory_usage") {
+        let query = admin.from("mt_service_objects").select("size_bytes", { count: "exact" })
+          .eq("account_id", account.id).eq("app_id", appId).eq("object_type", "record");
+        if (externalUserId) query = query.eq("external_user_id", externalUserId);
+        const { data: rows, count, error } = await query.limit(10000);
+        if (error) throw error;
+        const usedBytes = (rows ?? []).reduce((sum, row) => sum + Number(row.size_bytes || 0), 0);
+        return json({ app, externalUserId: externalUserId || null, count: count ?? 0, usedBytes, quotaBytes: Number(account.quota_bytes) });
+      }
+      let query = baseQuery().order("updated_at", { ascending: false }).limit(500);
+      if (externalUserId) query = query.eq("external_user_id", externalUserId);
+      if (typeof body.category === "string" && ["user", "chat", "document", "image", "custom"].includes(body.category)) query = query.eq("object_category", body.category);
+      const { data: records, count, error } = await query;
+      if (error) throw error;
+      return json({ app, records: records ?? [], count: count ?? 0, externalUserId: externalUserId || null });
+    }
+
+    if (action === "neural_memory_put") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      const externalUserId = typeof body.externalUserId === "string" ? body.externalUserId.trim() : "";
+      const key = typeof body.key === "string" ? body.key.trim() : "";
+      const category = typeof body.category === "string" ? body.category : "custom";
+      const payload = body.data;
+      if (!appId || !externalUserId || !key || key.length > 200 || !["user", "chat", "document", "image", "custom"].includes(category)) return json({ error: "Aplicación, usuario externo, clave y categoría válidos son obligatorios." }, 400);
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return json({ error: "data debe ser un objeto JSON." }, 400);
+      const { data: app, error: appError } = await admin.from("mt_service_apps").select("id")
+        .eq("id", appId).eq("account_id", account.id).maybeSingle();
+      if (appError) throw appError;
+      if (!app) return json({ error: "Aplicación no encontrada." }, 404);
+      const sizeBytes = encoder.encode(JSON.stringify(payload)).byteLength;
+      if (sizeBytes > 262144) return json({ error: "Cada recuerdo admite hasta 256 KiB." }, 413);
+      const { data: record, error } = await admin.from("mt_service_objects").upsert({
+        account_id: account.id, app_id: appId, external_user_id: externalUserId,
+        object_type: "record", object_category: category, object_key: key,
+        storage_path: null, payload, size_bytes: sizeBytes, content_type: "application/json",
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "app_id,external_user_id,object_key" })
+        .select("id,app_id,external_user_id,object_category,object_key,payload,size_bytes,created_at,updated_at").single();
+      if (error) {
+        if (error.code === "23514") return json({ error: "Se alcanzó la cuota de almacenamiento." }, 413);
+        throw error;
+      }
+      await admin.from("mt_service_audit").insert({ account_id: account.id, actor_id: ownerId, action: "neural_memory_record_upserted", details: { app_id: appId, external_user_id: externalUserId, object_key: key, size_bytes: sizeBytes } });
+      return json({ record });
+    }
+
+    if (action === "neural_memory_delete") {
+      const appId = typeof body.appId === "string" ? body.appId : "";
+      const externalUserId = typeof body.externalUserId === "string" ? body.externalUserId.trim() : "";
+      const key = typeof body.key === "string" ? body.key.trim() : "";
+      if (!appId || !externalUserId || !key) return json({ error: "Aplicación, usuario externo y clave son obligatorios." }, 400);
+      const { data, error } = await admin.from("mt_service_objects").delete()
+        .eq("account_id", account.id).eq("app_id", appId).eq("external_user_id", externalUserId)
+        .eq("object_key", key).eq("object_type", "record").select("id").maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: "Recuerdo no encontrado." }, 404);
+      await admin.from("mt_service_audit").insert({ account_id: account.id, actor_id: ownerId, action: "neural_memory_record_deleted", details: { app_id: appId, external_user_id: externalUserId, object_key: key } });
+      return json({ deleted: true });
+    }
+
     if (action === "set_quota") {
       const quotaBytes = Number(body.quotaBytes);
       if (!Number.isSafeInteger(quotaBytes) || quotaBytes < 52428800 || quotaBytes > 5368709120) {
