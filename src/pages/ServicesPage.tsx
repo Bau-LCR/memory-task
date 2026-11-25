@@ -190,6 +190,7 @@ export function ServicesPage() {
         <Badge tone="blue">Consola disponible</Badge>
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {!supabase && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">El backend todavía no está desplegado o no está configurado en este entorno. La consola se muestra en modo de desarrollo; conectá Supabase para administrar aplicaciones y almacenamiento reales.</p>}
       {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" role="tablist" aria-label="Secciones de cuenta de servicio">
         <button role="tab" aria-selected={activeSection === 'apps'} className={activeSection === 'apps' ? 'rounded-lg bg-navy px-3 py-2 text-sm text-white' : 'rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100'} onClick={() => setActiveSection('apps')}>Aplicaciones y datos</button>
