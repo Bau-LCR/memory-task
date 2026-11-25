@@ -149,13 +149,12 @@ Deno.serve(async (req: Request) => {
       for (const item of body.records) {
         const id = String(item?.id ?? "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 140);
         const question = typeof item?.question === "string" ? item.question.slice(0, 6000) : "";
-        const answer = typeof item?.answer === "string" ? item.answer.slice(0, 12000) : "";
-        if (!id || !question || !answer) continue;
+        if (!id || !question) continue;
         const payload = {
           title: question.slice(0, 140),
-          content: "Pregunta: " + question + "\n\nRespuesta: " + answer,
-          source: "Cut-real 2 · historial propio",
-          kind: "chat-memory",
+          content: "Señal de entrada del usuario: " + question,
+          source: "Cut-real 2 · señal privada de conversación",
+          kind: "chat-signal",
           intent: String(item?.intent ?? "general").slice(0, 40),
           created_at: String(item?.createdAt ?? new Date().toISOString()),
         };
