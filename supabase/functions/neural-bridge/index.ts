@@ -30,6 +30,19 @@ function jsonBytes(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
 
+async function getUsedBytes(db: any) {
+  let total = 0;
+  for (let offset = 0; offset < 100000; offset += 1000) {
+    const page = await db.from('mt_service_objects').select('size_bytes')
+      .eq('account_id', ACCOUNT_ID).order('created_at', { ascending: true }).range(offset, offset + 999);
+    if (page.error) throw page.error;
+    const rows = page.data ?? [];
+    total += rows.reduce((sum: number, row: any) => sum + Number(row.size_bytes || 0), 0);
+    if (rows.length < 1000) break;
+  }
+  return total;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: headers(req) });
   if (req.method !== "POST") return reply(req, { error: "Método no permitido." }, 405);
@@ -75,9 +88,7 @@ Deno.serve(async (req: Request) => {
         .eq("account_id", ACCOUNT_ID).eq("app_id", APP_ID)
         .eq("external_user_id", externalUserId).eq("object_key", key).maybeSingle();
       if (lookup.error) throw lookup.error;
-      const usedQuery = await db.from("mt_service_objects").select("size_bytes").eq("account_id", ACCOUNT_ID);
-      if (usedQuery.error) throw usedQuery.error;
-      const used = (usedQuery.data ?? []).reduce((sum: number, row: any) => sum + Number(row.size_bytes || 0), 0);
+      const used = await getUsedBytes(db);
       const account = await db.from("mt_service_accounts").select("quota_bytes").eq("id", ACCOUNT_ID).single();
       if (account.error) throw account.error;
       const projected = used - Number(lookup.data?.size_bytes || 0) + size;
@@ -98,19 +109,17 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "list" || action === "stats") {
-      const [listed, usage, account] = await Promise.all([
+      const [listed, account] = await Promise.all([
         action === "list"
           ? db.from("mt_service_objects").select("id,external_user_id,object_key,object_category,payload,size_bytes,created_at,updated_at")
               .eq("account_id", ACCOUNT_ID).eq("app_id", APP_ID)
               .in("external_user_id", [user.id, GLOBAL_USER]).order("updated_at", { ascending: false }).limit(1000)
           : Promise.resolve({ data: [], error: null }),
-        db.from("mt_service_objects").select("size_bytes").eq("account_id", ACCOUNT_ID),
         db.from("mt_service_accounts").select("quota_bytes").eq("id", ACCOUNT_ID).single(),
       ]);
       if (listed.error) throw listed.error;
-      if (usage.error) throw usage.error;
       if (account.error) throw account.error;
-      const usedBytes = (usage.data ?? []).reduce((sum: number, row: any) => sum + Number(row.size_bytes || 0), 0);
+      const usedBytes = await getUsedBytes(db);
       const quotaBytes = Number(account.data.quota_bytes || 0);
       return reply(req, {
         records: listed.data ?? [], count: listed.data?.length ?? 0,
