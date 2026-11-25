@@ -4,3 +4,7 @@ project_id = "evrbaaeccuwaxclnpknk"
 # Disable Supabase JWT gateway verification only for this function.
 [functions.service-api]
 verify_jwt = false
+
+# Cut-real neural memory bridge validates Cut-real sessions inside the function.
+[functions.neural-bridge]
+verify_jwt = false
